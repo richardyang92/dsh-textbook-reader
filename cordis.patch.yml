@@ -1,0 +1,14 @@
+# dsh-textbook-reader bundle patch
+#
+# This is the bundle's mount declaration: DSH applies it as one profile layer
+# over dsh-base. The host half (exports ".") registers the textbook_* agent
+# tools and the /textbook-reader HTTP routes; the browser half arrives later
+# through the package's dsh.client declaration. No dsh source changes.
+#
+# Install for development (web profile):
+#   dsh plugin --profile web add file:/absolute/path/to/dsh-textbook-reader
+# Desktop install is owned by the Electron shell:
+#   插件 → 添加插件 → /absolute/path/to/dsh-textbook-reader → 启用 → 重启
+- insert:
+    - id: textbook-reader
+      name: 'dsh-textbook-reader'

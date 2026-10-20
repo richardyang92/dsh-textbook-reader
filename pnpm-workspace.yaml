@@ -1,0 +1,10 @@
+packages:
+  - .
+
+# pnpm 11 blocks dependency install scripts by default. esbuild needs its
+# postinstall to place the platform binary; this is the only package allowed.
+allowBuilds:
+  esbuild: true
+
+# Local development pins recent packages; do not hold new releases.
+minimumReleaseAge: 0

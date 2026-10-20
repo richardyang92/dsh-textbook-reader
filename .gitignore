@@ -1,0 +1,32 @@
+# Dependencies and build outputs
+node_modules/
+.pnpm-store/
+dist/
+lib/client.js
+lib/client.*.js
+lib/client.js.map
+reader/app.js
+reader/app.js.map
+reader/vendor/
+coverage/
+
+# Runtime data: never commit tokens, model caches or parsed artifacts
+data/
+*.token
+mineru-token
+config.json
+*.zip
+*.pdf
+*.jsonl
+test/.tmp/
+test/tmp/
+tmp/
+
+# OS/editor noise
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# Local experiments
+*.local.*
