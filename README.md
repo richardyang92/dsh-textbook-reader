@@ -9,7 +9,7 @@ MVP 目标是把一本 PDF 教材变成可检索、可引用、可跟踪进度�
 - 聊天回答带 `[p.N]` 页码引用，点击后跳到对应页并高亮原文块；
 - 独立 pdf.js 阅读器，通过官方侧栏入口 + 主面板 iframe 承载，默认不修改官方界面。
 
-> 当前状态：**M0 骨架**。宿主半可加载；路由、解析、阅读器与工具在后续里程碑实现。技术方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> 当前状态：**M2 完成**。宿主半可加载；已实现书籍存储、PDF 导入/流式阅读、MinerU 解析管线、自适应 zip 发现、章节树生成与阅读器解析 UI。章节树编辑、学习进度、pdf.js 与 agent 工具在 M3/M4 实现。技术方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 范围
 
@@ -34,7 +34,28 @@ pnpm test        # 构建后跑 node:test
 pnpm typecheck
 ```
 
-后续里程碑会把浏览器半构建到 `lib/client.js`，把阅读器构建到 `reader/app.js`，并把 pdf.js 放到 `reader/vendor/`。
+### 不装插件先看 UI（fixture 服务器）
+
+```bash
+pnpm build
+node scripts/seed-m2-demo.mjs --data test/.tmp/demo --fresh
+node scripts/dev-server.mjs --data test/.tmp/demo --port 52000
+# 打开 http://127.0.0.1:52000/textbook-reader/
+```
+
+seeder 使用假 MinerU 客户端和内存 fixture，不发网络请求；用于验证书架、解析结果、章节树与页码跳转。M3 会把它替换为 pdf.js 阅读器与树编辑。
+
+### 真实 MinerU 校准
+
+拿到 token 后（设置页保存到 `~/.dsh/textbook-reader/mineru-token`）：
+
+```bash
+pnpm probe:mineru --pdf /path/to/one-page.pdf
+```
+
+脚本只打印脱敏结构（状态、zip 条目名、JSON 顶层字段、bbox 样例），不打印 token、Authorization 或签名 URL。会消耗少量 MinerU 页额度。
+
+当前无 token，真实云 API 的响应/zip 结构尚未实测；适配层按文档与自适应发现实现，实测后用 probe 输出固化 fixture。
 
 ## 安装
 
@@ -76,6 +97,13 @@ test/           node:test
 docs/           架构与决策
 ```
 
+## 当前限制
+
+- 未配置 MinerU token 时，解析会明确返回 `token_missing`，不会静默失败；
+- 单个 MinerU 任务 ≤600 页；>600 页的本地分段在 M5 实现；
+- 图注 VLM 关闭时没有任何图片/VLM 外发（MinerU 解析本身除外）；
+- 阅读器当前使用浏览器 PDF 查看器，M3 替换为内置 pdf.js 页面。
+
 ## 验收计划
 
 1. ≥400 页教材生成三级章节树，可手工修正；
@@ -84,7 +112,7 @@ docs/           架构与决策
 4. 无 token 或网络失败时明确报错并降级；
 5. 未开启图注时零额外外发请求。
 
-当前没有 MinerU token，真实解析链路会在 M2 用合成数据/固定 fixture 先实现，待 token 配置后补做一次真实 API 校准与 400 页样书验收。
+开发环境暂无 MinerU token：M2 已用合成 420 页数据验证三级树与 bbox 归一化；真实 API 校准与 400 页样书验收待 token 配置后补做，见 [docs/VERIFY-M2.md](docs/VERIFY-M2.md)。
 
 ## 许可
 
