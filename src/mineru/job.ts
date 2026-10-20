@@ -279,16 +279,25 @@ export class ParseManager {
           progressEnd: end,
         })
         const offset = part.range.from - 1
+        const prefix = `s${part.index}-`
         for (const page of normalized.pages) {
           const shifted: NormalizedPage = {
             ...page,
             page: page.page + offset,
-            blocks: page.blocks.map((block) => ({ ...block, page: block.page + offset })),
+            blocks: page.blocks.map((block) => ({
+              ...block,
+              id: prefix + block.id,
+              page: block.page + offset,
+            })),
           }
           mergedPages.push(shifted)
         }
         for (const heading of normalized.headings) {
-          mergedHeadings.push({ ...heading, page: heading.page + offset })
+          mergedHeadings.push({
+            ...heading,
+            blockId: prefix + heading.blockId,
+            page: heading.page + offset,
+          })
         }
         stats = {
           blocks: stats.blocks + normalized.stats.blocks,

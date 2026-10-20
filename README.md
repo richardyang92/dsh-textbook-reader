@@ -80,6 +80,8 @@ dsh plugin --profile web add file:/absolute/path/to/dsh-textbook-reader
 
 使用 `file:` 而不是 `link:`：`link:` 不安装插件依赖，宿主启动时可能找不到运行时依赖。
 
+本地源码更新后先 `pnpm build`；若 pnpm 提示 `Already up to date`，请在插件管理页卸载/重装（或重新执行 `add`），确保新增的 `dist/` 文件被同步。
+
 ## 数据与安全
 
 - 数据根：`~/.dsh/textbook-reader/`；可执行环境变量 `TEXTBOOK_READER_DATA_DIR` 覆盖（测试/便携场景）。
