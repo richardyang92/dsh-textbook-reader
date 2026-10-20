@@ -1,6 +1,6 @@
 # 技术方案
 
-> 状态：方案 v1 已确认（主面板落位、无专用 agent preset、图注 VLM 默认关闭）。M0 骨架已提交。
+> 状态：MVP（M0–M5）代码完成。方案 v1 已确认：主面板落位、无专用 agent preset、图注 VLM 默认关闭。验收证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
 ## 1. 交付形态
 
@@ -205,9 +205,9 @@ test/*.test.mjs
 | M0 | git init、骨架、构建/测试、patch、初始 commit | `pnpm install && pnpm build && pnpm test`；git log |
 | M1 | 存储、token、上传/导入、PDF 流、阅读器壳 | 掩码、安全、重启持久、桌面入口 |
 | M2 | MinerU、自适应 zip、归一化、自动树 | 真实 1 页校准；≥400 页树 |
-| M3 | 树编辑、进度/疑问、重启恢复 | 改名/合并/纠层；进度不丢 |
-| M4 | 侧栏入口 + main iframe + 引用拦截 + 工具 | 提问带 `[p.N]`，点击跳页高亮 |
-| M5 | >600 页分段、失败降级、安全/无外发、文档 | 验收 4/5 |
+| M3 | 树编辑、进度/疑问、重启恢复 | ✅ pdf.js 阅读器、树编辑、进度/疑问持久化（[VERIFY-M3](VERIFY-M3.md)） |
+| M4 | 侧栏入口 + main iframe + 引用拦截 + 工具 | ✅ 真实 DSH Web profile：工具调用 + `[p.N]` 点击高亮（[VERIFY-M4](VERIFY-M4.md)） |
+| M5 | >600 页分段、失败降级、安全/无外发、文档 | ✅ 41 项测试；420 页合成树、重启、无 token、无图注外发证据见 [VERIFY-M5](VERIFY-M5.md) |
 | M6 | 全量验收、截图、交付说明 | 逐条证据 |
 
 ## 8. 验收映射

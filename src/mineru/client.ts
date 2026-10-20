@@ -101,6 +101,7 @@ export class MineruClient {
 
   /** PUT the PDF to the signed URL. Deliberately never sets Content-Type. */
   async uploadFile(url: string, filePath: string): Promise<void> {
+    assertSafeRemoteUrl(url)
     let info
     try {
       info = await stat(filePath)
@@ -167,6 +168,7 @@ export class MineruClient {
 
   /** Download a result zip to a private file with a size cap. */
   async downloadZip(url: string, target: string): Promise<void> {
+    assertSafeRemoteUrl(url)
     let response: Response
     try {
       response = await this.fetchImpl(url, {
@@ -275,6 +277,27 @@ function mapApiCode(code: unknown, message: string): AppError {
     return new AppError(429, 'mineru_quota_exhausted', `MinerU 今日额度已用尽${suffix}。`, '明天再试，或在 mineru.net 查看额度。')
   }
   return apiError('mineru_api_error', `MinerU 请求失败（${String(code)}）${suffix}`)
+}
+
+function assertSafeRemoteUrl(raw: string): void {
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw apiError('mineru_url_invalid', 'MinerU 返回了不合法的文件地址。')
+  }
+  if (url.protocol !== 'https:') {
+    throw apiError('mineru_url_invalid', 'MinerU 文件地址必须是 https。')
+  }
+  const host = url.hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '')
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host === '::1') {
+    throw apiError('mineru_url_invalid', 'MinerU 文件地址指向本机，已拒绝。')
+  }
+  if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) {
+    throw apiError('mineru_url_invalid', 'MinerU 文件地址指向私有网络，已拒绝。')
+  }
+  const private172 = /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+  if (private172) throw apiError('mineru_url_invalid', 'MinerU 文件地址指向私有网络，已拒绝。')
 }
 
 function networkError(error: unknown): AppError {

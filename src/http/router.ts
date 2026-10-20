@@ -560,6 +560,9 @@ export class ReaderRouter {
         // Try the next candidate.
       }
     }
+    const suffix = `/${assetPath.replace(/\\/g, '/').replace(/^\/+/, '')}`
+    const found = await findFileBySuffix(rawRoot, suffix, 0, 4)
+    if (found) return found
     throw notFound('解析图片不存在。')
   }
 
@@ -634,4 +637,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function packageRoot(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+}
+
+/** Bounded recursive fallback for images under nested MinerU zip directories. */
+async function findFileBySuffix(root: string, suffix: string, depth: number, maxDepth: number): Promise<string | undefined> {
+  if (depth > maxDepth) return undefined
+  let entries
+  try {
+    entries = await readdir(root, { withFileTypes: true })
+  } catch {
+    return undefined
+  }
+  let found: string | undefined
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    const full = join(root, entry.name)
+    if (entry.isDirectory()) {
+      const nested = await findFileBySuffix(full, suffix, depth + 1, maxDepth)
+      if (nested) {
+        if (found) return undefined
+        found = nested
+      }
+    } else if (entry.isFile() && full.replace(/\\/g, '/').endsWith(suffix)) {
+      if (found) return undefined
+      found = full
+    }
+  }
+  return found
 }

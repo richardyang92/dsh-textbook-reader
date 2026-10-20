@@ -9,7 +9,7 @@ MVP 目标是把一本 PDF 教材变成可检索、可引用、可跟踪进度�
 - 聊天回答带 `[p.N]` 页码引用，点击后跳到对应页并高亮原文块；
 - 独立 pdf.js 阅读器，通过官方侧栏入口 + 主面板 iframe 承载，默认不修改官方界面。
 
-> 当前状态：**M4 完成**。侧栏入口 + 主面板 iframe、7 个 agent 工具、`[p.N]` 引用点击跳转高亮均已在真实 DSH Web profile 端到端验证。剩余 M5：>600 页分段、失败/无外发加固、桌面端最终安装验收。方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> 当前状态：**M5 完成（MVP 代码）**。420 页三级树、真实 DSH 端到端 `[p.N]` 点击高亮、重启持久化、无 token/网络失败降级、图注关闭零额外外发均已验证。真实 MinerU token 与桌面端安装待用户环境补齐，见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
 
 ## 范围
 
@@ -104,7 +104,7 @@ docs/           架构与决策
 ## 当前限制
 
 - 未配置 MinerU token 时，解析会明确返回 `token_missing`，不会静默失败；
-- 单个 MinerU 任务 ≤600 页；>600 页的本地分段在 M5 实现；
+- 单个 MinerU 任务 ≤600 页；>600 页已实现 pdf-lib 本地分段（每段 ≤600 页）并合并页号；
 - 图注 VLM 关闭时没有任何图片/VLM 外发（MinerU 解析本身除外）；
 - 阅读器已使用本地 vendored pdf.js（不依赖 CDN/本地模型）。
 
@@ -116,7 +116,7 @@ docs/           架构与决策
 4. 无 token 或网络失败时明确报错并降级；
 5. 未开启图注时零额外外发请求。
 
-开发环境暂无 MinerU token：M2 已用合成 420 页数据验证三级树与 bbox 归一化；真实 API 校准与 400 页样书验收待 token 配置后补做，见 [docs/VERIFY-M2.md](docs/VERIFY-M2.md)。
+开发环境暂无 MinerU token：已用合成 420 页数据验证三级树与 bbox 归一化；真实 API 校准与 400 页样书验收待 token 配置后补做，见 [docs/VERIFY-M2.md](docs/VERIFY-M2.md) 与 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
 
 ## 许可
 

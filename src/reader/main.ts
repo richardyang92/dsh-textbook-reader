@@ -151,6 +151,8 @@ function renderConfig(): void {
   const table = $('table') as HTMLInputElement
   ocr.checked = config.settings.mineru.isOcr
   table.checked = config.settings.mineru.enableTable
+  const caption = document.getElementById('caption-vlm') as HTMLInputElement | null
+  if (caption) caption.checked = config.settings.captionVlm.enabled
 }
 
 async function saveToken(): Promise<void> {
@@ -849,6 +851,8 @@ function bindEvents(): void {
       })()
     } else if (data.type === 'tbr:open-library') {
       showLibrary()
+    } else if (data.type === 'tbr:ping') {
+      window.parent.postMessage({ type: 'tbr:ready' }, '*')
     }
   })
 }

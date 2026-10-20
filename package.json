@@ -1,6 +1,6 @@
 {
   "name": "dsh-textbook-reader",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "教材伴读 (Textbook Reader) for DeepSeek Harness: MinerU-parsed PDF textbook library, auto chapter tree, page-anchored citations with a built-in pdf.js reader, and cross-session learning progress.",
   "type": "module",
   "engines": {
