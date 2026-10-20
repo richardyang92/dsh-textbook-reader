@@ -7,6 +7,8 @@ lib/client.*.js
 lib/client.js.map
 reader/app.js
 reader/app.js.map
+reader/assets/app.js
+reader/assets/app.js.map
 reader/vendor/
 coverage/
 

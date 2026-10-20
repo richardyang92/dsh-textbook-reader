@@ -2,6 +2,7 @@
 
 import { join } from 'node:path'
 import type { Tree, TreeNode } from '../types.js'
+import { applyTreeOp, type TreeOperation } from '../tree/ops.js'
 import { AppError } from '../errors.js'
 import type { DataPaths } from '../config.js'
 import { assertBookId } from './books.js'
@@ -34,6 +35,18 @@ export class TreeStore {
     return this.lock.run(bookId, async () => {
       validateTree(tree)
       const next: Tree = { ...tree, bookId, updatedAt: new Date().toISOString() }
+      await writeJsonAtomic(this.treeFile(bookId), next, 0o600)
+      return next
+    })
+  }
+
+  /** Apply one manual op atomically; a missing tree means the book is not parsed yet. */
+  async apply(bookId: string, operation: TreeOperation): Promise<Tree> {
+    return this.lock.run(bookId, async () => {
+      const tree = await this.read(bookId)
+      if (!tree) throw new AppError(409, 'not_parsed', '这本书还没有章节树。', '先完成解析再修改章节。')
+      const next = applyTreeOp(tree, operation)
+      validateTree(next)
       await writeJsonAtomic(this.treeFile(bookId), next, 0o600)
       return next
     })

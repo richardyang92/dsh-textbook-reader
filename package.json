@@ -1,6 +1,6 @@
 {
   "name": "dsh-textbook-reader",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "教材伴读 (Textbook Reader) for DeepSeek Harness: MinerU-parsed PDF textbook library, auto chapter tree, page-anchored citations with a built-in pdf.js reader, and cross-session learning progress.",
   "type": "module",
   "engines": {
@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.reader.json --noEmit",
     "pretest": "pnpm run build",
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "dev:reader": "node scripts/dev-server.mjs",
@@ -51,6 +51,7 @@
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
     "esbuild": "^0.28.2",
+    "pdfjs-dist": "6.4.299",
     "playwright-core": "1.64.1",
     "typescript": "~5.9.3",
     "yazl": "^3.3.1"

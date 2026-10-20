@@ -15,6 +15,7 @@ import { ProgressStore } from '../store/progress.js'
 import { TreeStore } from '../store/tree.js'
 import { ensureDir, pathExists, randomId, readJsonFile } from '../store/atomic.js'
 import type { ParseManager } from '../mineru/job.js'
+import type { TreeOperation } from '../tree/ops.js'
 import { createRequestGuard, type ConnectionFence } from './guard.js'
 import {
   mimeType,
@@ -181,7 +182,8 @@ export class ReaderRouter {
       }
       if (segments.length === 4 && segments[3] === 'tree') {
         if (method === 'GET') return this.getTree(res, id)
-        return methodNotAllowed(res, ['GET'])
+        if (method === 'POST') return this.applyTreeOp(req, res, id)
+        return methodNotAllowed(res, ['GET', 'POST'])
       }
       if (segments.length === 5 && segments[3] === 'pages') {
         if (method !== 'GET') return methodNotAllowed(res, ['GET'])
@@ -435,6 +437,28 @@ export class ReaderRouter {
     const book = await this.books.getBook(id)
     const tree = await this.tree.read(id)
     sendJson(res, 200, { ok: true, tree: tree ?? null, parseStatus: book.parse.status })
+  }
+
+  private async applyTreeOp(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
+    await this.books.getBook(id)
+    const body = await readJsonBody(req, JSON_LIMIT)
+    if (!isRecord(body) || typeof body.op !== 'string' || typeof body.nodeId !== 'string') {
+      throw badRequest('章节操作需要 op 与 nodeId。')
+    }
+    let operation: TreeOperation
+    if (body.op === 'rename') {
+      if (typeof body.title !== 'string') throw badRequest('重命名需要 title。')
+      operation = { op: 'rename', nodeId: body.nodeId, title: body.title }
+    } else if (body.op === 'merge') {
+      operation = { op: 'merge', nodeId: body.nodeId }
+    } else if (body.op === 'relevel') {
+      if (body.level !== 1 && body.level !== 2) throw badRequest('level 只能是 1 或 2。')
+      operation = { op: 'relevel', nodeId: body.nodeId, level: body.level }
+    } else {
+      throw badRequest('未知的章节操作。')
+    }
+    const tree = await this.tree.apply(id, operation)
+    sendJson(res, 200, { ok: true, tree })
   }
 
   private async getPage(res: ServerResponse, id: string, rawPage: string): Promise<void> {

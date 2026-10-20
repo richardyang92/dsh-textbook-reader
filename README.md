@@ -9,7 +9,7 @@ MVP 目标是把一本 PDF 教材变成可检索、可引用、可跟踪进度�
 - 聊天回答带 `[p.N]` 页码引用，点击后跳到对应页并高亮原文块；
 - 独立 pdf.js 阅读器，通过官方侧栏入口 + 主面板 iframe 承载，默认不修改官方界面。
 
-> 当前状态：**M2 完成**。宿主半可加载；已实现书籍存储、PDF 导入/流式阅读、MinerU 解析管线、自适应 zip 发现、章节树生成与阅读器解析 UI。章节树编辑、学习进度、pdf.js 与 agent 工具在 M3/M4 实现。技术方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> 当前状态：**M3 完成**。宿主半 + 独立阅读器已可用：书籍存储、PDF 导入/Range 流、MinerU 解析、自适应 zip、章节树自动生成与手动修正、内置 pdf.js 阅读器、页码/bbox 高亮、当前页/已读章节/掌握度/疑问清单持久化。agent 工具与侧栏入口/引用点击在 M4 实现。技术方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 范围
 
@@ -43,7 +43,7 @@ node scripts/dev-server.mjs --data test/.tmp/demo --port 52000
 # 打开 http://127.0.0.1:52000/textbook-reader/
 ```
 
-seeder 使用假 MinerU 客户端和内存 fixture，不发网络请求；用于验证书架、解析结果、章节树与页码跳转。M3 会把它替换为 pdf.js 阅读器与树编辑。
+seeder 使用假 MinerU 客户端和内存 fixture，不发网络请求；用于验证书架、解析结果、章节树、书名/掌握度/疑问与页码高亮。
 
 ### 真实 MinerU 校准
 
@@ -102,7 +102,7 @@ docs/           架构与决策
 - 未配置 MinerU token 时，解析会明确返回 `token_missing`，不会静默失败；
 - 单个 MinerU 任务 ≤600 页；>600 页的本地分段在 M5 实现；
 - 图注 VLM 关闭时没有任何图片/VLM 外发（MinerU 解析本身除外）；
-- 阅读器当前使用浏览器 PDF 查看器，M3 替换为内置 pdf.js 页面。
+- 阅读器已使用本地 vendored pdf.js（不依赖 CDN/本地模型）。
 
 ## 验收计划
 

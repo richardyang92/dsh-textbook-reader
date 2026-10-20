@@ -5,149 +5,58 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>教材伴读</title>
-  <style>
-    :root {
-      color-scheme: light dark;
-      --bg: #f6f7f9;
-      --panel: #ffffff;
-      --text: #1f2328;
-      --muted: #656d76;
-      --border: #d8dee4;
-      --accent: #0969da;
-      --accent-soft: #ddf4ff;
-      --danger: #cf222e;
-      --ok: #1a7f37;
-      --shadow: 0 1px 3px rgba(0,0,0,.08);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117; --panel: #161b22; --text: #e6edf3; --muted: #8b949e;
-        --border: #30363d; --accent: #58a6ff; --accent-soft: #0c2d4d; --danger: #f85149; --ok: #3fb950;
-        --shadow: 0 1px 3px rgba(0,0,0,.5);
-      }
-    }
-    * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
-    body { font-size: 14px; line-height: 1.5; }
-    button, input { font: inherit; }
-    button {
-      border: 1px solid var(--border); background: var(--panel); color: var(--text);
-      border-radius: 8px; padding: 7px 12px; cursor: pointer;
-    }
-    button:hover { border-color: var(--accent); }
-    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.primary:hover { filter: brightness(1.08); }
-    button.ghost { border-color: transparent; background: transparent; color: var(--muted); }
-    button:disabled { opacity: .55; cursor: not-allowed; }
-    input[type=text], input[type=password], input[type=number] {
-      width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 8px;
-      background: var(--bg); color: var(--text); outline: none;
-    }
-    input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
-    header {
-      display: flex; align-items: center; gap: 12px; padding: 12px 18px;
-      background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10;
-    }
-    header h1 { font-size: 16px; margin: 0; font-weight: 650; letter-spacing: .01em; }
-    header .badge {
-      font-size: 11px; color: var(--muted); border: 1px solid var(--border);
-      border-radius: 999px; padding: 1px 8px;
-    }
-    header .spacer { flex: 1; }
-    main { max-width: 1060px; margin: 0 auto; padding: 20px 18px 48px; }
-    .hidden { display: none !important; }
-    .muted { color: var(--muted); }
-    .small { font-size: 12px; }
-    .banner {
-      border: 1px solid var(--border); border-left: 4px solid var(--accent);
-      background: var(--panel); border-radius: 8px; padding: 10px 14px; margin: 0 0 16px;
-      white-space: pre-wrap;
-    }
-    .banner.error { border-left-color: var(--danger); }
-    .banner.ok { border-left-color: var(--ok); }
-    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-    .toolbar .grow { flex: 1; }
-    .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-    .card {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-      padding: 14px 16px; box-shadow: var(--shadow); cursor: pointer; text-align: left;
-      display: flex; flex-direction: column; gap: 8px; color: var(--text);
-    }
-    .card:hover { border-color: var(--accent); }
-    .card .title { font-weight: 620; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .card .meta { display: flex; gap: 10px; color: var(--muted); font-size: 12px; flex-wrap: wrap; }
-    .pill { border: 1px solid var(--border); border-radius: 999px; padding: 0 8px; font-size: 11px; color: var(--muted); }
-    .pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
-    .bar { height: 5px; border-radius: 99px; background: var(--border); overflow: hidden; }
-    .bar > i { display: block; height: 100%; background: var(--accent); }
-    .empty { color: var(--muted); padding: 30px 0; text-align: center; }
-    .panel {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-      padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px;
-    }
-    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .field { display: grid; gap: 6px; flex: 1; min-width: 220px; }
-    .field label { font-size: 12px; color: var(--muted); }
-    details.settings { margin-bottom: 16px; }
-    details.settings summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
-    .viewer { display: grid; grid-template-columns: 240px 1fr; gap: 16px; min-height: calc(100vh - 150px); }
-    @media (max-width: 760px) { .viewer { grid-template-columns: 1fr; } }
-    .side { display: flex; flex-direction: column; gap: 12px; }
-    .pdf-frame {
-      width: 100%; height: calc(100vh - 150px); min-height: 420px; border: 1px solid var(--border);
-      border-radius: 12px; background: #fff;
-    }
-    .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 4px 0; }
-    .tree { display: grid; gap: 2px; max-height: 340px; overflow: auto; margin: 0 -4px; }
-    .tree-chapter, .tree-section {
-      display: flex; align-items: center; justify-content: space-between; gap: 8px;
-      width: 100%; text-align: left; border: 0; background: none; color: var(--text);
-      border-radius: 6px; padding: 5px 7px; cursor: pointer; font-size: 13px;
-    }
-    .tree-chapter { font-weight: 560; }
-    .tree-section { padding-left: 20px; color: var(--muted); font-size: 12.5px; }
-    .tree-chapter:hover, .tree-section:hover { background: var(--accent-soft); color: var(--text); }
-    .tree-page { color: var(--muted); font-size: 11px; white-space: nowrap; }
-    .tree-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .kv b { font-weight: 600; }
-    .divider { height: 1px; background: var(--border); margin: 10px 0; }
-    .toast { position: fixed; right: 18px; bottom: 18px; max-width: 380px; z-index: 30; }
-  </style>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/textbook-reader/assets/app.css">
 </head>
 <body>
-  <header>
-    <h1>📘 教材伴读</h1>
-    <span class="badge">M2 · MinerU 解析与章节树</span>
-    <span class="spacer"></span>
-    <button id="refresh" class="ghost" type="button">刷新</button>
-  </header>
-  <main>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">📘</span>
+        <h1>教材伴读</h1>
+        <span class="badge">M3</span>
+      </div>
+      <div class="top-actions">
+        <span id="global-status" class="muted small"></span>
+        <button id="back-to-library" class="ghost hidden" type="button">← 书架</button>
+        <button id="back-to-chat" class="ghost hidden" type="button">← 对话</button>
+        <button id="refresh" class="ghost" type="button">刷新</button>
+      </div>
+    </header>
+
     <div id="banner" class="banner hidden" role="status"></div>
 
-    <section id="library">
-      <div class="toolbar">
-        <div class="grow">
-          <div style="font-weight:620;font-size:15px">我的教材</div>
-          <div class="muted small">PDF 会复制到 ~/.dsh/textbook-reader/；M2 接入 MinerU 解析。</div>
+    <main id="library-view" class="library-view">
+      <div class="library-head">
+        <div>
+          <h2>我的教材</h2>
+          <p class="muted small">PDF 会复制到 ~/.dsh/textbook-reader/；解析使用 MinerU 云端 API。</p>
         </div>
-        <label class="button-like">
+        <div class="row">
           <input id="file" type="file" accept="application/pdf,.pdf" class="hidden">
           <button id="upload" class="primary" type="button">上传 PDF</button>
-        </label>
+        </div>
       </div>
 
-      <details class="settings">
+      <div id="books" class="cards"></div>
+      <div id="empty" class="empty hidden">还没有教材。点击「上传 PDF」开始。</div>
+
+      <details id="settings" class="settings">
         <summary>MinerU 设置</summary>
-        <div class="panel" style="margin-top:10px">
-          <div class="field" style="margin-bottom:10px">
+        <div class="panel settings-panel">
+          <div class="field">
             <label for="token">MinerU API token（只保存在本机 0600 文件，界面只回掩码）</label>
             <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="粘贴 mineru.net 的 API token">
           </div>
-          <div class="row">
+          <div class="row settings-row">
             <button id="save-token" class="primary" type="button">保存 token</button>
             <button id="clear-token" class="ghost" type="button">清除 token</button>
             <span id="token-status" class="muted small">读取中…</span>
+          </div>
+          <div class="row settings-row">
+            <label class="check"><input id="ocr" type="checkbox"> 启用 OCR（扫描版教材需要）</label>
+            <label class="check"><input id="table" type="checkbox"> 识别表格</label>
+            <button id="save-options" type="button">保存解析选项</button>
           </div>
           <div class="divider"></div>
           <div class="row muted small">
@@ -157,444 +66,65 @@
           </div>
         </div>
       </details>
+    </main>
 
-      <div id="books" class="cards"></div>
-      <div id="empty" class="empty hidden">还没有教材。点击「上传 PDF」开始。</div>
-    </section>
-
-    <section id="detail" class="hidden">
-      <div class="toolbar">
-        <button id="back" class="ghost" type="button">← 返回书架</button>
-        <div class="grow"></div>
-        <span id="detail-status" class="pill"></span>
-      </div>
-      <div class="viewer">
-        <aside class="side">
-          <div class="panel">
-            <div id="detail-title" style="font-weight:650;font-size:16px;margin-bottom:8px"></div>
-            <div class="kv"><span>页数</span><b id="detail-pages">—</b></div>
-            <div class="kv"><span>大小</span><b id="detail-size">—</b></div>
-            <div class="kv"><span>解析</span><b id="detail-parse">—</b></div>
-            <div class="divider"></div>
-            <div class="field">
-              <label for="current-page">当前页（自动保存到本机）</label>
-              <input id="current-page" type="number" min="1" step="1">
-            </div>
-            <div class="row" style="margin-top:8px">
-              <button id="save-page" type="button">保存页码</button>
-              <span id="page-saved" class="muted small"></span>
-            </div>
-            <div class="divider"></div>
-            <div class="row">
-              <button id="parse" type="button" class="primary">开始解析</button>
-              <span id="parse-status" class="muted small"></span>
-            </div>
-            <div id="parse-error" class="banner error hidden" style="margin-top:10px"></div>
-            <div class="divider"></div>
-            <div style="font-weight:600;margin-bottom:6px">章节树</div>
-            <div id="tree-empty" class="muted small">尚未解析：先配置 token 并开始解析。</div>
-            <div id="tree" class="tree"></div>
-            <div class="muted small" style="margin-top:8px">M3 会加入改名/合并/纠层、已读章节、掌握度与疑问清单；M4 接入 [p.N] 引用跳转。</div>
+    <main id="reader-view" class="reader-view hidden">
+      <aside class="reader-side">
+        <section class="side-block book-block">
+          <div class="book-title-row">
+            <h2 id="book-title">教材</h2>
+            <span id="parse-pill" class="pill"></span>
           </div>
-        </aside>
-        <iframe id="pdf" class="pdf-frame" title="PDF 阅读器"></iframe>
-      </div>
-    </section>
-  </main>
-  <div id="toast" class="toast"></div>
+          <div class="kv"><span>页数</span><b id="book-pages">—</b></div>
+          <div class="kv"><span>大小</span><b id="book-size">—</b></div>
+          <div class="reader-parse-row">
+            <button id="parse" class="primary" type="button">开始解析</button>
+            <span id="parse-status" class="muted small"></span>
+          </div>
+          <div id="parse-error" class="banner error hidden"></div>
+        </section>
 
-  <script>
-    'use strict'
-    const API = '/textbook-reader'
-    const $ = (id) => document.getElementById(id)
-    const state = { books: [], activeId: null, current: null, progress: null, config: null }
+        <section class="side-block tree-block">
+          <div class="side-heading">章节树 <span id="tree-count" class="muted small"></span></div>
+          <div id="tree-empty" class="muted small">尚未解析：先配置 token 并开始解析。</div>
+          <div id="tree" class="tree"></div>
+        </section>
 
-    function api(path, options) {
-      return fetch(API + path, {
-        ...options,
-        headers: { ...(options && options.headers ? options.headers : {}) },
-        cache: 'no-store',
-      }).then(async (response) => {
-        let payload = null
-        try { payload = await response.json() } catch (_) { /* empty */ }
-        if (!response.ok || !payload || payload.ok === false) {
-          const error = (payload && payload.error) || {}
-          const err = new Error(error.message || ('请求失败（HTTP ' + response.status + '）'))
-          err.code = error.code
-          err.hint = error.hint
-          throw err
-        }
-        return payload
-      })
-    }
+        <details id="progress-block" class="side-block progress-block" open>
+          <summary>学习进度</summary>
+          <div id="progress-summary" class="progress-summary"></div>
+          <div class="side-heading small">每章掌握度</div>
+          <div id="mastery-list" class="mastery-list"></div>
+          <div class="divider"></div>
+          <div class="side-heading small">疑问清单</div>
+          <div class="question-add">
+            <input id="question-input" type="text" maxlength="500" placeholder="记下当前页的疑问…">
+            <button id="question-add" type="button">添加</button>
+          </div>
+          <div id="question-list" class="question-list"></div>
+        </details>
+      </aside>
 
-    function showBanner(message, kind) {
-      const el = $('banner')
-      if (!message) { el.className = 'banner hidden'; el.textContent = ''; return }
-      el.className = 'banner' + (kind ? ' ' + kind : '')
-      el.textContent = message
-    }
+      <section class="pdf-panel">
+        <div class="pdf-toolbar">
+          <button id="prev-page" type="button">上一页</button>
+          <button id="next-page" type="button">下一页</button>
+          <label class="page-jump">第 <input id="page-input" type="number" min="1" step="1"> / <span id="page-total">–</span> 页</label>
+          <span class="spacer"></span>
+          <button id="zoom-out" type="button" title="缩小">−</button>
+          <span id="zoom-label" class="muted small">100%</span>
+          <button id="zoom-in" type="button" title="放大">＋</button>
+          <button id="zoom-fit" type="button">适宽</button>
+          <span id="pdf-status" class="muted small"></span>
+        </div>
+        <div id="pdf-scroll" class="pdf-scroll">
+          <div id="pdf-pages" class="pdf-pages"></div>
+          <div id="pdf-loading" class="pdf-loading">正在加载 PDF…</div>
+        </div>
+      </section>
+    </main>
+  </div>
 
-    function toast(message, kind) {
-      const host = $('toast')
-      const el = document.createElement('div')
-      el.className = 'banner ' + (kind || '')
-      el.style.margin = '0 0 8px'
-      el.textContent = message
-      host.appendChild(el)
-      setTimeout(() => el.remove(), 4200)
-    }
-
-    function fmtBytes(bytes) {
-      if (!Number.isFinite(bytes) || bytes <= 0) return '—'
-      if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB'
-      return (bytes / 1024 / 1024).toFixed(1) + ' MB'
-    }
-
-    function statusText(status) {
-      return ({
-        none: '未解析', preparing: '准备中', uploading: '上传中', polling: 'MinerU 解析中',
-        downloading: '下载中', normalizing: '整理中', done: '已解析', failed: '解析失败', interrupted: '已中断',
-      })[status] || status || '未知'
-    }
-
-    function el(tag, className, text) {
-      const node = document.createElement(tag)
-      if (className) node.className = className
-      if (text !== undefined) node.textContent = text
-      return node
-    }
-
-    async function loadConfig() {
-      state.config = await api('/api/config')
-      const token = state.config.token || {}
-      $('token-status').textContent = token.configured
-        ? '已配置（' + token.mask + '）'
-        : '未配置：解析会明确报错，不会静默失败'
-      $('token').value = ''
-    }
-
-    async function saveToken() {
-      const token = $('token').value.trim()
-      if (!token) { showBanner('请先粘贴 token。', 'error'); return }
-      try {
-        await api('/api/config', {
-          method: 'PUT', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token }),
-        })
-        await loadConfig()
-        showBanner('token 已保存（0600），界面只显示掩码。', 'ok')
-      } catch (error) { showBanner(error.message + (error.hint ? '\n' + error.hint : ''), 'error') }
-    }
-
-    async function clearToken() {
-      if (!confirm('清除本机保存的 MinerU token？')) return
-      try {
-        await api('/api/config', {
-          method: 'PUT', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ clearToken: true }),
-        })
-        await loadConfig()
-        showBanner('token 已清除。', 'ok')
-      } catch (error) { showBanner(error.message, 'error') }
-    }
-
-    function renderBooks() {
-      const host = $('books')
-      host.replaceChildren()
-      $('empty').classList.toggle('hidden', state.books.length > 0)
-      for (const book of state.books) {
-        const card = el('button', 'card')
-        card.type = 'button'
-        card.addEventListener('click', () => openBook(book.id))
-        const top = el('div', 'row')
-        top.appendChild(el('div', 'title', book.title))
-        top.style.justifyContent = 'space-between'
-        if (book.active) top.appendChild(el('span', 'pill', '当前'))
-        card.appendChild(top)
-        const meta = el('div', 'meta')
-        meta.appendChild(el('span', '', book.pages + ' 页'))
-        meta.appendChild(el('span', '', fmtBytes(book.bytes)))
-        meta.appendChild(el('span', 'pill' + (book.parseStatus === 'done' ? ' ok' : ''), statusText(book.parseStatus)))
-        card.appendChild(meta)
-        const bar = el('div', 'bar')
-        const fill = el('i')
-        fill.style.width = Math.max(0, Math.min(100, book.pagePercent || 0)) + '%'
-        bar.appendChild(fill)
-        card.appendChild(bar)
-        const foot = el('div', 'meta')
-        foot.appendChild(el('span', '', '读至第 ' + book.currentPage + ' 页'))
-        foot.appendChild(el('span', '', '已读章节 ' + book.readChapterCount))
-        card.appendChild(foot)
-        host.appendChild(card)
-      }
-    }
-
-    async function loadBooks() {
-      const data = await api('/api/books')
-      state.books = data.books || []
-      state.activeId = data.activeBookId || null
-      renderBooks()
-    }
-
-    async function openBook(id, updateUrl) {
-      try {
-        const data = await api('/api/books/' + encodeURIComponent(id))
-        state.current = data.book
-        state.progress = data.progress
-        state.activeId = id
-        $('library').classList.add('hidden')
-        $('detail').classList.remove('hidden')
-        showBanner('')
-        $('detail-title').textContent = data.book.title
-        $('detail-pages').textContent = data.book.pages + ' 页'
-        $('detail-size').textContent = fmtBytes(data.book.bytes)
-        $('detail-parse').textContent = statusText(data.book.parse && data.book.parse.status)
-        $('detail-status').textContent = statusText(data.book.parse && data.book.parse.status)
-        $('detail-status').className = 'pill' + (data.book.parse && data.book.parse.status === 'done' ? ' ok' : '')
-        $('current-page').max = String(data.book.pages)
-        $('current-page').value = String((data.progress && data.progress.currentPage) || 1)
-        $('pdf').src = API + '/api/books/' + encodeURIComponent(id) + '/pdf'
-        $('page-saved').textContent = ''
-        stopParsePolling()
-        state.tree = null
-        renderParse(data.book.parse)
-        await loadTree()
-        if (updateUrl !== false) {
-          const url = new URL(location.href)
-          url.searchParams.set('book', id)
-          history.replaceState(null, '', url)
-        }
-      } catch (error) {
-        showBanner(error.message + (error.hint ? '\n' + error.hint : ''), 'error')
-      }
-    }
-
-    async function savePage(silent) {
-      if (!state.current || !state.progress) return
-      const value = Number($('current-page').value)
-      try {
-        const data = await api('/api/books/' + encodeURIComponent(state.current.id) + '/progress', {
-          method: 'PUT', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...state.progress, currentPage: value }),
-        })
-        state.progress = data.progress
-        $('page-saved').textContent = '已保存'
-        if (!silent) toast('页码已保存到本机。', 'ok')
-      } catch (error) {
-        $('page-saved').textContent = ''
-        showBanner(error.message + (error.hint ? '\n' + error.hint : ''), 'error')
-      }
-    }
-
-    async function uploadFile(file) {
-      if (!file) return
-      const button = $('upload')
-      button.disabled = true
-      button.textContent = '导入中…'
-      try {
-        const response = await fetch(API + '/api/books', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/pdf',
-            'x-file-name': encodeURIComponent(file.name),
-            'x-book-title': encodeURIComponent(file.name.replace(/\.pdf$/i, '')),
-          },
-          body: file,
-        })
-        const payload = await response.json().catch(() => null)
-        if (!response.ok || !payload || payload.ok === false) {
-          const error = (payload && payload.error) || {}
-          throw new Error(error.message || ('上传失败（HTTP ' + response.status + '）'))
-        }
-        await loadBooks()
-        if (payload.book && payload.book.id) {
-          showBanner(payload.duplicate ? '这本书已存在，已打开现有副本。' : 'PDF 已导入。', 'ok')
-          await openBook(payload.book.id)
-        }
-      } catch (error) {
-        showBanner(error.message + (error.hint ? '\n' + error.hint : ''), 'error')
-      } finally {
-        button.disabled = false
-        button.textContent = '上传 PDF'
-        $('file').value = ''
-      }
-    }
-
-    function parseLabel(parse) {
-      if (!parse) return '未解析'
-      const progress = typeof parse.progress === 'number' ? ' ' + parse.progress + '%' : ''
-      return statusText(parse.status) + progress
-    }
-
-    function renderParse(parse) {
-      const button = $('parse')
-      const running = parse && ['preparing', 'uploading', 'polling', 'downloading', 'normalizing'].includes(parse.status)
-      const done = Boolean(parse && parse.status === 'done')
-      button.disabled = Boolean(running) || done
-      button.textContent = running ? '解析中…' : done ? '已解析' : (parse && parse.status === 'failed') ? '重试解析' : '开始解析'
-      $('parse-status').textContent = parseLabel(parse)
-      const errorBox = $('parse-error')
-      if (parse && parse.error) {
-        errorBox.className = 'banner error'
-        errorBox.textContent = parse.error.message + (parse.error.hint ? '\n' + parse.error.hint : '')
-      } else if (parse && parse.warnings && parse.warnings.length) {
-        errorBox.className = 'banner'
-        errorBox.textContent = parse.warnings.join('\n')
-      } else {
-        errorBox.className = 'banner error hidden'
-        errorBox.textContent = ''
-      }
-      if (running) startParsePolling()
-    }
-
-    function renderTree() {
-      const host = $('tree')
-      host.replaceChildren()
-      const tree = state.tree
-      const empty = $('tree-empty')
-      if (!tree || !Array.isArray(tree.nodes) || tree.nodes.length === 0) {
-        empty.textContent = state.current && state.current.parse.status === 'done'
-          ? '解析完成但没有识别到章节标题。'
-          : '尚未解析：先配置 token 并开始解析。'
-        empty.classList.remove('hidden')
-        return
-      }
-      empty.classList.add('hidden')
-      const chapters = tree.nodes.filter((node) => node.level === 1)
-      for (const chapter of chapters) {
-        host.appendChild(treeRow(chapter, 'tree-chapter', true))
-        for (const childId of chapter.children) {
-          const child = tree.nodes.find((node) => node.id === childId)
-          if (child) host.appendChild(treeRow(child, 'tree-section', false))
-        }
-      }
-    }
-
-    function treeRow(node, className, chapter) {
-      const row = document.createElement('button')
-      row.type = 'button'
-      row.className = className
-      row.title = node.title
-      const title = el('span', 'tree-title', (chapter ? '▸ ' : '') + node.title)
-      const page = el('span', 'tree-page', 'p.' + node.pageStart)
-      row.append(title, page)
-      row.addEventListener('click', () => jumpToPage(node.pageStart))
-      return row
-    }
-
-    function jumpToPage(page) {
-      if (!state.current) return
-      const target = Math.max(1, Math.min(state.current.pages, Number(page) || 1))
-      $('pdf').src = API + '/api/books/' + encodeURIComponent(state.current.id) + '/pdf#page=' + target
-      $('current-page').value = String(target)
-      if (state.progress) state.progress.currentPage = target
-      savePage(true)
-    }
-
-    async function loadTree() {
-      if (!state.current) return
-      try {
-        const data = await api('/api/books/' + encodeURIComponent(state.current.id) + '/tree')
-        state.tree = data.tree || null
-        renderTree()
-        if (data.parseStatus) {
-          state.current.parse = { ...(state.current.parse || {}), status: data.parseStatus }
-          renderParse(state.current.parse)
-        }
-      } catch (error) {
-        showBanner(error.message, 'error')
-      }
-    }
-
-    let parsePollTimer = null
-    function stopParsePolling() {
-      if (parsePollTimer !== null) { clearInterval(parsePollTimer); parsePollTimer = null }
-    }
-
-    function startParsePolling() {
-      if (parsePollTimer !== null) return
-      parsePollTimer = setInterval(async () => {
-        if (!state.current) { stopParsePolling(); return }
-        try {
-          const data = await api('/api/books/' + encodeURIComponent(state.current.id) + '/parse')
-          const parse = data.parse
-          state.current.parse = parse
-          renderParse(parse)
-          if (['done', 'failed', 'interrupted', 'none'].includes(parse.status)) {
-            stopParsePolling()
-            if (parse.status === 'done') {
-              await loadTree()
-              await loadBooks().catch(() => {})
-            }
-          }
-        } catch (error) {
-          stopParsePolling()
-          showBanner(error.message, 'error')
-        }
-      }, 2000)
-    }
-
-    async function startParse() {
-      if (!state.current) return
-      $('parse').disabled = true
-      $('parse-error').classList.add('hidden')
-      try {
-        const data = await api('/api/books/' + encodeURIComponent(state.current.id) + '/parse', {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
-        })
-        state.current.parse = data.parse
-        renderParse(data.parse)
-        if (data.started) {
-          showBanner('已提交 MinerU 解析。解析期间可以继续阅读 PDF。', 'ok')
-          startParsePolling()
-        } else {
-          showBanner('这本书已有解析状态，无需重复提交。', 'ok')
-        }
-      } catch (error) {
-        $('parse').disabled = false
-        $('parse').textContent = '开始解析'
-        $('parse-error').textContent = error.message + (error.hint ? '\n' + error.hint : '')
-        $('parse-error').classList.remove('hidden')
-        showBanner('解析未启动：' + error.message, 'error')
-      }
-    }
-
-    function showLibrary(updateUrl) {
-
-      $('detail').classList.add('hidden')
-      $('library').classList.remove('hidden')
-      $('pdf').src = 'about:blank'
-      state.current = null
-      state.progress = null
-      if (updateUrl !== false) {
-        const url = new URL(location.href)
-        url.searchParams.delete('book')
-        history.replaceState(null, '', url)
-      }
-      loadBooks().catch((error) => showBanner(error.message, 'error'))
-    }
-
-    $('refresh').addEventListener('click', () => {
-      loadBooks().then(() => loadConfig()).catch((error) => showBanner(error.message, 'error'))
-    })
-    $('upload').addEventListener('click', () => $('file').click())
-    $('file').addEventListener('change', (event) => uploadFile(event.target.files && event.target.files[0]))
-    $('save-token').addEventListener('click', saveToken)
-    $('clear-token').addEventListener('click', clearToken)
-    $('back').addEventListener('click', () => showLibrary())
-    $('save-page').addEventListener('click', savePage)
-    $('parse').addEventListener('click', () => startParse())
-
-    ;(async function boot() {
-      try {
-        await Promise.all([loadConfig(), loadBooks()])
-        const id = new URL(location.href).searchParams.get('book')
-        if (id) await openBook(id, false)
-      } catch (error) {
-        showBanner(error.message + (error.hint ? '\n' + error.hint : ''), 'error')
-      }
-    })()
-  </script>
+  <script type="module" src="/textbook-reader/assets/app.js"></script>
 </body>
 </html>

@@ -25,3 +25,6 @@ execFileSync(process.execPath, [tsc, '-p', join(root, 'tsconfig.json')], {
 })
 
 console.log('[build] host -> dist/')
+
+const { buildReader } = await import('./build-reader.mjs')
+await buildReader()
