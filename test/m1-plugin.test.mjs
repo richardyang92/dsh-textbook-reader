@@ -16,7 +16,7 @@ test('M1 plugin: apply registers the prefix route and disposes it with the fiber
     await rm(dataRoot, { recursive: true, force: true })
   })
 
-  let injected
+  const injections = []
   let registered
   let disposed = false
   const base = {
@@ -24,12 +24,13 @@ test('M1 plugin: apply registers the prefix route and disposes it with the fiber
     get: () => undefined,
     effect: () => undefined,
     inject: (services, callback) => {
-      injected = { services, callback }
+      injections.push({ services, callback })
     },
   }
 
   apply(base)
-  assert.deepEqual(injected.services, ['webServer'])
+  const injected = injections.find((item) => item.services[0] === 'webServer')
+  assert.ok(injected)
 
   const server = http.createServer()
   const scoped = {
@@ -60,6 +61,37 @@ test('M1 plugin: apply registers the prefix route and disposes it with the fiber
   assert.equal(response.status, 200)
   const body = await response.json()
   assert.equal(body.service, 'dsh-textbook-reader')
+
+  const definitions = []
+  const toolsInjection = injections.find((item) => item.services[0] === 'tools')
+  assert.ok(toolsInjection)
+  toolsInjection.callback({
+    ...base,
+    tools: {
+      register(definition) {
+        definitions.push(definition)
+        return () => {}
+      },
+    },
+    effect: () => undefined,
+  })
+  assert.deepEqual(
+    definitions.map((definition) => definition.name).sort(),
+    ['textbook_add', 'textbook_list', 'textbook_parse', 'textbook_progress', 'textbook_progress_update', 'textbook_search', 'textbook_tree'],
+  )
+
+  let promptSection
+  const promptInjection = injections.find((item) => item.services[0] === 'systemPrompt')
+  assert.ok(promptInjection)
+  promptInjection.callback({
+    ...base,
+    systemPrompt: { section: (section) => { promptSection = section; return () => {} } },
+    effect: () => undefined,
+  })
+  assert.match(promptSection.text, /textbook_search/)
+  assert.match(promptSection.text, /\[p\.N\]/)
+  assert.match(promptSection.text, /readerUrl/)
+
   await new Promise((resolve) => server.close(resolve))
   assert.equal(disposed, true)
 })

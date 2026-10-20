@@ -5,7 +5,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { Book, BookSummary, NormalizedBook } from '../types.js'
+import type { Book, BookSummary, NormalizedBook, Tree } from '../types.js'
 import { AppError, badRequest, conflict, isAppError, notFound } from '../errors.js'
 import type { DataPaths, SettingsPatch } from '../config.js'
 import { ConfigStore, redactSecrets } from '../config.js'
@@ -16,6 +16,7 @@ import { TreeStore } from '../store/tree.js'
 import { ensureDir, pathExists, randomId, readJsonFile } from '../store/atomic.js'
 import type { ParseManager } from '../mineru/job.js'
 import type { TreeOperation } from '../tree/ops.js'
+import { searchNormalized } from '../search.js'
 import { createRequestGuard, type ConnectionFence } from './guard.js'
 import {
   mimeType,
@@ -61,7 +62,9 @@ export class ReaderRouter {
   private readonly tree: TreeStore
   private readonly parser: ParseManager | undefined
   private readonly readerRoot: string
-  private readonly guard: (req: IncomingMessage) => number | null
+  private guard: (req: IncomingMessage) => number | null
+  private connection: ConnectionFence | undefined
+  private readonly trustedHosts: readonly string[] | undefined
   private readonly logger: ReaderLogger
   private readonly maxUploadBytes: number
 
@@ -73,12 +76,23 @@ export class ReaderRouter {
     this.tree = options.tree
     this.parser = options.parser
     this.readerRoot = options.readerRoot ?? join(packageRoot(), 'reader')
+    this.connection = options.connection
+    this.trustedHosts = options.trustedHosts ?? parseTrustedHosts()
     this.guard = createRequestGuard({
-      connection: options.connection,
-      trustedHosts: options.trustedHosts ?? parseTrustedHosts(),
+      ...(options.connection ? { connection: options.connection } : {}),
+      trustedHosts: this.trustedHosts,
     })
     this.logger = options.logger ?? {}
     this.maxUploadBytes = options.maxUploadBytes ?? MAX_PDF_BYTES
+  }
+
+  /** Attach the host connection fence once the service is available. */
+  attachConnection(connection: ConnectionFence | undefined): void {
+    this.connection = connection
+    this.guard = createRequestGuard({
+      ...(connection ? { connection } : {}),
+      trustedHosts: this.trustedHosts,
+    })
   }
 
   async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -179,6 +193,10 @@ export class ReaderRouter {
         if (method === 'GET') return this.getParse(res, id)
         if (method === 'POST') return this.startParse(req, res, id)
         return methodNotAllowed(res, ['GET', 'POST'])
+      }
+      if (segments.length === 4 && segments[3] === 'search') {
+        if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+        return this.searchBook(res, id, url)
       }
       if (segments.length === 4 && segments[3] === 'tree') {
         if (method === 'GET') return this.getTree(res, id)
@@ -459,6 +477,31 @@ export class ReaderRouter {
     }
     const tree = await this.tree.apply(id, operation)
     sendJson(res, 200, { ok: true, tree })
+  }
+
+  private async searchBook(res: ServerResponse, id: string, url: URL): Promise<void> {
+    const book = await this.books.getBook(id)
+    const query = (url.searchParams.get('q') ?? '').trim()
+    if (!query) throw badRequest('缺少检索词 q。')
+    const limitRaw = Number(url.searchParams.get('limit') ?? '5')
+    const limit = Number.isInteger(limitRaw) ? Math.min(20, Math.max(1, limitRaw)) : 5
+    const nodeId = url.searchParams.get('node') ?? undefined
+    const normalized = await readJsonFile<NormalizedBook>(this.normalizedFile(id))
+    if (!normalized) {
+      throw new AppError(409, 'not_parsed', '这本书还没有解析结果。', '先在阅读器里开始解析。')
+    }
+    const tree = await this.tree.read(id)
+    const hits = searchNormalized(normalized, tree as Tree | undefined, query, limit, nodeId)
+    sendJson(res, 200, {
+      ok: true,
+      bookId: id,
+      query,
+      hits: hits.map((hit) => ({
+        ...hit,
+        citationPath: `/textbook-reader/?book=${encodeURIComponent(id)}&page=${hit.page}&block=${encodeURIComponent(hit.blockId)}`,
+      })),
+      pages: book.pages,
+    })
   }
 
   private async getPage(res: ServerResponse, id: string, rawPage: string): Promise<void> {

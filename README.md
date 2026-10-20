@@ -2,14 +2,14 @@
 
 DeepSeek Harness（DSH）插件：**教材伴读**。
 
-MVP 目标是把一本 PDF 教材变成可检索、可引用、可跟踪进度的学习工作台：
+MVP 目标是把一本 PDF 教材变成可检索、可引用、可跟踪进度的学习工作台。当前能力：
 
 - 从 MinerU 解析结果自动生成 **书 → 章 → 节** 三级章节树，允许手动改名、合并、纠正错层；
 - 每本书记录**当前页、已读章节、每章掌握度自评、疑问清单**，重启/跨会话不丢；
 - 聊天回答带 `[p.N]` 页码引用，点击后跳到对应页并高亮原文块；
 - 独立 pdf.js 阅读器，通过官方侧栏入口 + 主面板 iframe 承载，默认不修改官方界面。
 
-> 当前状态：**M3 完成**。宿主半 + 独立阅读器已可用：书籍存储、PDF 导入/Range 流、MinerU 解析、自适应 zip、章节树自动生成与手动修正、内置 pdf.js 阅读器、页码/bbox 高亮、当前页/已读章节/掌握度/疑问清单持久化。agent 工具与侧栏入口/引用点击在 M4 实现。技术方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+> 当前状态：**M4 完成**。侧栏入口 + 主面板 iframe、7 个 agent 工具、`[p.N]` 引用点击跳转高亮均已在真实 DSH Web profile 端到端验证。剩余 M5：>600 页分段、失败/无外发加固、桌面端最终安装验收。方案见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 范围
 
@@ -56,6 +56,10 @@ pnpm probe:mineru --pdf /path/to/one-page.pdf
 脚本只打印脱敏结构（状态、zip 条目名、JSON 顶层字段、bbox 样例），不打印 token、Authorization 或签名 URL。会消耗少量 MinerU 页额度。
 
 当前无 token，真实云 API 的响应/zip 结构尚未实测；适配层按文档与自适应发现实现，实测后用 probe 输出固化 fixture。
+
+## 使用
+
+侧栏点「教材伴读」→ 上传 PDF → 在阅读器设置里配 MinerU token → 开始解析 → 在对话里提问，回答里的 `[p.N]` 可点击跳回并高亮。
 
 ## 安装
 

@@ -1,6 +1,6 @@
 {
   "name": "dsh-textbook-reader",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "教材伴读 (Textbook Reader) for DeepSeek Harness: MinerU-parsed PDF textbook library, auto chapter tree, page-anchored citations with a built-in pdf.js reader, and cross-session learning progress.",
   "type": "module",
   "engines": {
@@ -9,11 +9,21 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-locale"
+      ]
     }
   },
   "files": [
@@ -47,6 +57,7 @@
   "packageManager": "pnpm@11.22.0",
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@types/node": "^22.20.0",
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",

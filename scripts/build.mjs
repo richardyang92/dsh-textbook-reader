@@ -28,3 +28,6 @@ console.log('[build] host -> dist/')
 
 const { buildReader } = await import('./build-reader.mjs')
 await buildReader()
+
+const { buildClient } = await import('./build-client.mjs')
+await buildClient()

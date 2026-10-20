@@ -15,6 +15,8 @@ import { ProgressStore } from './store/progress.js'
 import { TreeStore } from './store/tree.js'
 import { ParseManager, type MineruApi } from './mineru/job.js'
 import { ReaderRouter, type ReaderLogger } from './http/router.js'
+import { registerTextbookTools, type ToolRegistryLike } from './tools/index.js'
+import { TEXTBOOK_GUIDANCE } from './prompt.js'
 
 export const name = 'dsh-textbook-reader'
 
@@ -29,9 +31,12 @@ export interface ReaderRuntime {
   tree: TreeStore
   parser: ParseManager
   router: ReaderRouter
+  /** Reader origin advertised to agent tools, filled when webServer is present. */
+  baseUrl?: string
 }
 
 interface WebServerLike {
+  readonly port?: number
   register(route: {
     kind: 'prefix'
     path: string
@@ -107,18 +112,29 @@ export function createReaderRuntime(options: {
  * @param ctx - host plugin context.
  */
 export function apply(ctx: Context): void {
+  const logger: ReaderLogger = {
+    info: (message) => safeLog(ctx, 'info', message),
+    warn: (message) => safeLog(ctx, 'warn', message),
+    error: (message) => safeLog(ctx, 'error', message),
+  }
+  const runtime = createReaderRuntime({ logger })
+  ctx.effect(() => () => runtime.parser.dispose())
+  void runtime.parser.recover().catch((error: unknown) => {
+    safeLog(
+      ctx,
+      'warn',
+      `[dsh-textbook-reader] parse recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
+
   ctx.inject(['webServer'], (scoped) => {
     const webServer = (scoped as unknown as { webServer?: WebServerLike }).webServer
     if (!webServer || typeof webServer.register !== 'function') return
     const connection = scoped.get?.('connection') as ConnectionLike | undefined
-    const runtime = createReaderRuntime({
-      ...(connection ? { connection } : {}),
-      logger: {
-        info: (message) => safeLog(ctx, 'info', message),
-        warn: (message) => safeLog(ctx, 'warn', message),
-        error: (message) => safeLog(ctx, 'error', message),
-      },
-    })
+    runtime.router.attachConnection(connection)
+    if (Number.isInteger(webServer.port) && (webServer.port ?? 0) > 0) {
+      runtime.baseUrl = `http://127.0.0.1:${webServer.port}`
+    }
     let dispose: (() => void) | undefined
     try {
       dispose = webServer.register({
@@ -140,15 +156,34 @@ export function apply(ctx: Context): void {
       } catch {
         // Disposal is best effort; the host is already tearing down.
       }
-      runtime.parser.dispose()
     })
-    void runtime.parser.recover().catch((error: unknown) => {
-      safeLog(
-        ctx,
-        'warn',
-        `[dsh-textbook-reader] parse recovery failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
+  })
+
+  ctx.inject(['tools'], (scoped) => {
+    const tools = (scoped as unknown as { tools?: ToolRegistryLike }).tools
+    if (!tools || typeof tools.register !== 'function') return
+    const dispose = registerTextbookTools(tools, {
+      paths: runtime.paths,
+      books: runtime.books,
+      progress: runtime.progress,
+      tree: runtime.tree,
+      parser: runtime.parser,
+      getReaderBaseUrl: () => runtime.baseUrl,
     })
+    scoped.effect(() => () => dispose())
+  })
+
+  ctx.inject(['systemPrompt'], (scoped) => {
+    const systemPrompt = (scoped as unknown as {
+      systemPrompt?: { section?: (section: { name: string; order: number; text: string }) => () => void }
+    }).systemPrompt
+    if (!systemPrompt || typeof systemPrompt.section !== 'function') return
+    const dispose = systemPrompt.section({
+      name: 'plugin:dsh-textbook-reader',
+      order: 150,
+      text: TEXTBOOK_GUIDANCE,
+    })
+    scoped.effect(() => () => dispose())
   })
 }
 

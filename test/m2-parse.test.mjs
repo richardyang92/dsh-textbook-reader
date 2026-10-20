@@ -96,6 +96,13 @@ test('M2 parse: fake MinerU job produces normalized pages, tree, assets and stat
   assert.equal(page.json.page.page, 3)
   assert.ok(page.json.page.blocks.some((block) => block.type === 'image'))
 
+  const search = await request(h.base, `/api/books/${id}/search?q=${encodeURIComponent('正文')}&limit=3`)
+  assert.equal(search.status, 200)
+  assert.equal(search.json.hits.length, 3)
+  assert.match(search.json.hits[0].citationPath, /page=\d+&block=b\d+/)
+  const noQuery = await request(h.base, `/api/books/${id}/search`)
+  assert.equal(noQuery.status, 400)
+
   const assetResponse = await fetch(`${h.base}/api/books/${id}/asset/images/fig1.jpg`)
   assert.equal(assetResponse.status, 200)
   assert.match(assetResponse.headers.get('content-type'), /image\/jpeg/)
