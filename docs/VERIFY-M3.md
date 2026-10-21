@@ -43,7 +43,7 @@ node scripts/dev-server.mjs --data test/.tmp/m3-demo --port 52010
 
 1. 左侧出现 3 章 × 9 节章节树；
 2. 点击任意节 → 右侧 pdf.js 滚到对应页，页码同步；
-3. 勾选章节 checkbox / 修改「每章掌握度」/ 添加疑问；
+3. 在「学习进度」里修改「每章掌握度」/ 添加疑问（已读章节通过 `textbook_progress_update` 或 API 维护）；
 4. 悬停章节行 →「改名 / 合并 / 降为节」，确认后刷新仍保留；
 5. 刷新浏览器 → 当前页、已读、掌握度、疑问均在（来自 `progress.json`）；
 6. 重启 fixture 服务器（同一 `--data` 目录）→ 数据仍在。
@@ -70,5 +70,5 @@ http://127.0.0.1:52010/textbook-reader/?book=<id>&page=15&block=<blockId>
 
 - 章节树合并/纠层通过 `confirm` 确认；不做拖拽排序；
 - 重复解析会重建章节树（手动编辑不迁移），该策略在 M5 文档中明确；
-- pdf.js 只渲染 canvas（暂不含文本选择层）；
+- pdf.js 渲染 canvas；可拖选的文本层来自 MinerU 解析块（M4 起支持选区提问）；
 - 跨进程重启的自动解析恢复标记为 `interrupted`，不自动续跑。

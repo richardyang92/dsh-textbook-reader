@@ -11,7 +11,7 @@ A DeepSeek Harness (DSH) plugin that turns a PDF textbook into a citable reading
 MinerU-parsed chapter tree, a bundled pdf.js reader, page-anchored `[p.N]` citations,
 PDF text selection, and cross-session learning progress — all stored locally.
 
-![教材伴读阅读器](docs/screenshots/m3-reader.png)
+![教材伴读阅读器：章节树与学习进度](docs/screenshots/m3-reader.png)
 
 ## 功能
 
@@ -21,8 +21,8 @@ PDF text selection, and cross-session learning progress — all stored locally.
 | MinerU 解析 | 调用 MinerU v4 `model_version=vlm`，自动发现 zip 内的 `content_list` / `layout` / 图片 |
 | 三级章节树 | 自动生成「书 → 章 → 节」，支持改名、合并、升降级纠错 |
 | 页锚定引用 | 回答带可点击 `[p.N]`，点击切到阅读器、跳到页码并按 bbox 高亮原文块 |
-| 原文选区 | 在 PDF 上拖选文本（扫描版也可，文本层来自 MinerU 解析块），带入右侧聊天提问 |
-| 学习进度 | 当前页、已读章节、每章 0–5 掌握度自评、疑问清单；重启与跨会话不丢 |
+| 原文选区 | 在 PDF 上拖选文本（扫描版也可，文本层来自 MinerU 解析块），带入右侧「AI 伴读」提问 |
+| 学习进度 | 当前页、已读章节、每章 0–5 掌握度自评、疑问清单；嵌入模式下在「目录」抽屉里，重启与跨会话不丢 |
 | 伴读聊天 | 每本教材一个真正的 DSH 子会话，统一放在「教材伴读」工作区，历史随书保存 |
 | 工具摘要 | 工具调用默认折叠为一行中文摘要，点开查看每次调用；摘要随对话历史持久化 |
 | 大书支持 | 单任务超过 200 页时用 `pdf-lib` 本地分段，合并页号；服务端报更小上限时自动二分重试 |
@@ -96,7 +96,7 @@ dsh --profile web
 1. 侧栏点「教材伴读」→「上传 PDF」；
 2. 在设置里保存 token →「开始解析」，等待解析完成；
 3. 打开伴读聊天提问，回答中的 `[p.N]` 可点击跳回并高亮；
-4. 在 PDF 上拖选原文 →「问 AI」，或直接在进度侧栏记录掌握度与疑问。
+4. 在 PDF 上拖选原文 →「问 AI」；「目录」抽屉里的学习进度可记录掌握度与疑问。
 
 > 未解析的书仍可正常翻阅；解析完成后才提供章节树、检索、选区与引用高亮。
 
@@ -115,7 +115,9 @@ dsh --profile web
 所有涉及教材内容的回答都必须带回真实页码的 `[p.N]` 链接；引用链接由工具返回的
 `readerUrl` / `citationUrl` 拼接，不允许编造页码。
 
-![聊天中的可点击页码引用](docs/screenshots/m4-chat-tools.png)
+![AI 伴读面板中的工具调用与可点击页码引用](docs/screenshots/m4-chat-tools.png)
+
+![在 PDF 上选区并带入 AI 伴读](docs/screenshots/m4-selection.png)
 
 ## 数据与隐私
 

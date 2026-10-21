@@ -2,6 +2,8 @@
 
 状态：✅ 已完成。已在真实 DSH Web profile（`dsh --profile web --port 52100`）中完成端到端验证；桌面端安装路径见 README。
 
+> 说明：以下端到端记录来自 M4 验收时的对话界面。0.6.0 起同一链路收敛为阅读器右侧的「AI 伴读」面板，最新截图见 [m4-chat-tools.png](screenshots/m4-chat-tools.png) 与 [m4-citation-jump.png](screenshots/m4-citation-jump.png)。
+
 ## 自动测试
 
 ```bash
@@ -59,7 +61,7 @@ dsh --profile web --port 52100 --no-open
 }
 ```
 
-证据截图：[m4-dsh-sidebar.png](screenshots/m4-dsh-sidebar.png) · [m4-chat-tools.png](screenshots/m4-chat-tools.png) · [m4-citation-jump.png](screenshots/m4-citation-jump.png)
+证据截图：[m4-dsh-sidebar.png](screenshots/m4-dsh-sidebar.png) · [m4-chat-tools.png](screenshots/m4-chat-tools.png) · [m4-citation-jump.png](screenshots/m4-citation-jump.png) · [m4-selection.png](screenshots/m4-selection.png)
 
 > 演示数据是假 MinerU 解析产物，仅用于 UI/工具/引用链路验证；验证后已从默认数据目录删除。真实 400 页教材验收仍待 MinerU token。
 
