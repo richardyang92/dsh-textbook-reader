@@ -108,8 +108,10 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 }
 .brand { display: flex; align-items: center; gap: 8px; }
 .brand h1 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: 0.01em; }
-.brand-mark { font-size: 17px; }
+.brand-mark { width: 18px; height: 18px; flex: none; display: block; color: var(--muted); }
 .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.icon-button { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; }
+.icon-button svg { width: 16px; height: 16px; }
 
 .library-view { flex: 1; overflow: auto; max-width: 1100px; width: 100%; margin: 0 auto; padding: 22px 20px 60px; }
 .library-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
@@ -159,6 +161,9 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
   gap: 10px;
 }
 .side-block { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; }
+.tree-block { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tree-block .tree { flex: 1; min-height: 0; }
+.app.embedded .reader-side { overflow: hidden; }
 .book-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .book-title-row h2 { margin: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
 .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 12.5px; padding: 2px 0; color: var(--muted); }
@@ -168,11 +173,13 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 .side-block .banner { margin: 8px 0 0; padding: 7px 9px; font-size: 12px; }
 .side-heading { font-size: 12.5px; font-weight: 620; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .side-heading.small { font-weight: 560; color: var(--muted); margin-top: 8px; }
-.tree { max-height: 330px; overflow: auto; display: grid; gap: 1px; margin: 0 -3px; }
+.tree { max-height: none; overflow: auto; display: grid; gap: 1px; margin: 0 -3px; }
 .tree-row { display: flex; align-items: center; gap: 4px; border-radius: 6px; padding: 2px 3px; }
 .tree-row:hover { background: var(--accent-soft); }
+.tree-row.current { background: var(--accent-soft); }
+.tree-row.current .tree-title { color: var(--accent); }
+.tree-row.current .tree-page { color: var(--accent); }
 .tree-row.section { padding-left: 18px; }
-.tree-row .read-check { flex: none; width: 14px; height: 14px; accent-color: var(--accent); }
 .tree-main {
   flex: 1;
   min-width: 0;
@@ -215,7 +222,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 .question-actions button:hover { color: var(--accent); }
 .question-page { color: var(--muted); font-size: 10.5px; margin-left: 4px; }
 
-.pdf-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.pdf-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
 .pdf-toolbar {
   flex: none;
   display: flex;
@@ -228,7 +235,7 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 .pdf-toolbar button { padding: 4px 9px; font-size: 12.5px; }
 .page-jump { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; }
 .page-jump input { width: 54px; padding: 3px 5px; text-align: center; }
-.pdf-scroll { position: relative; flex: 1; overflow: auto; padding: 22px 16px 60px; }
+.pdf-scroll { position: relative; flex: 1; min-height: 0; overflow: auto; padding: 22px 16px 60px; }
 .pdf-pages { position: relative; margin: 0 auto; width: 800px; }
 .pdf-page { position: relative; margin: 0 auto 22px; }
 .pdf-sheet {
@@ -239,9 +246,29 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
   overflow: hidden;
 }
 .pdf-canvas { display: block; width: 100%; height: 100%; }
+/* Transparent text layer built from MinerU blocks: it makes scanned PDFs
+   selectable without depending on an embedded PDF text layer. */
+.pdf-block-layer { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.pdf-block-text {
+  position: absolute;
+  color: transparent;
+  background: transparent;
+  font-family: inherit;
+  line-height: 1.28;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: hidden;
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.pdf-block-text::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); color: transparent; }
 .pdf-page-pending {
   position: absolute;
   inset: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -251,7 +278,26 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 }
 .pdf-page-pending.hidden { display: none; }
 .pdf-page-label { text-align: center; color: var(--muted); font-size: 11px; padding-top: 5px; user-select: none; }
-.pdf-highlight-layer { position: absolute; inset: 0; pointer-events: none; }
+.pdf-highlight-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.selection-toolbar {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+}
+.selection-toolbar.hidden { display: none !important; }
+.selection-toolbar button { padding: 3px 8px; font-size: 12px; border-radius: 6px; }
+.selection-summary { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.selection-ask { background: var(--accent); border-color: var(--accent); color: #fff; }
+.selection-ask:hover { border-color: var(--accent); filter: brightness(1.08); }
 .pdf-highlight {
   position: absolute;
   border: 2px solid var(--warn);
@@ -277,8 +323,8 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
 .pdf-loading.hidden { display: none; }
 
 @media (max-width: 900px) {
-  .reader-view { flex-direction: column; }
-  .reader-side {
+  .app:not(.embedded) .reader-view { flex-direction: column; }
+  .app:not(.embedded) .reader-side {
     width: 100%;
     max-height: 36vh;
     border-right: 0;
@@ -286,6 +332,37 @@ input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px v
     flex-direction: row;
     overflow: auto;
   }
-  .side-block { min-width: 240px; flex: 1; }
+  .app:not(.embedded) .side-block { min-width: 240px; flex: 1; }
+  .app:not(.embedded) .tree-block { flex: none; }
+  .app:not(.embedded) .tree { max-height: 26vh; }
   .pdf-scroll { padding: 14px 8px 40px; }
+}
+
+/* Embedded in the split AI panel: the sidebar becomes a collapsible drawer so
+   the PDF keeps the full width. It starts closed; the 目录 button opens it. */
+.app.embedded .reader-view { position: relative; }
+.app.embedded .reader-side {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 12;
+  width: min(300px, 86vw);
+  max-height: none;
+  border-right: 1px solid var(--border);
+  border-bottom: 0;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 12px 0 28px rgba(15, 23, 42, 0.14);
+  transform: translateX(-102%);
+  transition: transform 0.18s ease;
+}
+.app.embedded .reader-side.open { transform: translateX(0); }
+.app.embedded .side-block { min-width: 0; }
+.app.embedded .pdf-panel { width: 100%; }
+.side-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  background: rgba(15, 23, 42, 0.18);
 }

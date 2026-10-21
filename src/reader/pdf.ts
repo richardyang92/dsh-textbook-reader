@@ -12,8 +12,35 @@ const PDFJS_URL = `${API}/vendor/pdf.min.mjs`
 const WORKER_URL = `${API}/vendor/pdf.worker.min.mjs`
 const CMAP_URL = `${API}/vendor/cmaps/`
 const STANDARD_FONTS_URL = `${API}/vendor/standard_fonts/`
+const WASM_URL = `${API}/vendor/wasm/`
+
+export const MAX_SELECTION = 2000
+const MAX_SELECTION_BLOCKS = 32
+
+/** A text selection mapped back to the parsed blocks it intersects. */
+export interface PdfSelection {
+  text: string
+  page: number
+  pageFrom?: number
+  pageTo?: number
+  blockIds: string[]
+}
 
 let pdfjsPromise: Promise<any> | undefined
+
+/**
+ * pdf.js ≥ 6 removed `PDFDocumentProxy.destroy()`: the document proxy only
+ * exposes `cleanup()`/`loadingTask`, and teardown lives on the loading task.
+ * Always destroy through the task, and never let teardown throw into callers.
+ */
+async function destroyTask(task: any): Promise<void> {
+  if (!task || typeof task.destroy !== 'function') return
+  try {
+    await task.destroy()
+  } catch {
+    /* worker already gone / aborted */
+  }
+}
 
 async function loadPdfjs(): Promise<any> {
   if (!pdfjsPromise) {
@@ -53,6 +80,8 @@ export class PdfViewer {
   private destroyed = false
   private scrollFrame = 0
   private dataCache = new Map<number, PageData | null>()
+  private loadTask: any
+  private loadSerial = 0
 
   constructor(options: PdfViewerOptions) {
     this.options = options
@@ -69,6 +98,7 @@ export class PdfViewer {
   async load(url: string): Promise<void> {
     this.destroy()
     this.destroyed = false
+    const serial = ++this.loadSerial
     this.rendered.clear()
     this.dataCache.clear()
     this.shells = []
@@ -77,35 +107,65 @@ export class PdfViewer {
     this.options.loading.textContent = '正在加载 PDF…'
     this.options.onStatus?.('加载 PDF…')
 
-    const pdfjs = await loadPdfjs()
-    const doc = await pdfjs.getDocument({
-      url,
-      cMapUrl: CMAP_URL,
-      cMapPacked: true,
-      standardFontDataUrl: STANDARD_FONTS_URL,
-    }).promise
-    if (this.destroyed) {
-      await doc.destroy().catch(() => {})
-      return
-    }
-    this.doc = doc
+    let task: any
+    try {
+      const pdfjs = await loadPdfjs()
+      task = pdfjs.getDocument({
+        url,
+        cMapUrl: CMAP_URL,
+        cMapPacked: true,
+        standardFontDataUrl: STANDARD_FONTS_URL,
+        // Without this, pdf.js cannot instantiate the OpenJPEG/JBIG2/ICC wasm
+        // decoders: scanned pages (JPXDecode) silently render blank white.
+        wasmUrl: WASM_URL,
+      })
+      this.loadTask = task
+      const doc = await task.promise
+      const discard = async (): Promise<void> => {
+        if (this.loadTask === task) this.loadTask = undefined
+        if (this.doc === doc) this.doc = undefined
+        await destroyTask(task)
+      }
+      // A newer load() or destroy() superseded this one while the bytes were
+      // in flight: throw this document away instead of adopting it.
+      if (this.destroyed || serial !== this.loadSerial) {
+        await discard()
+        return
+      }
+      this.doc = doc
 
-    const first = await doc.getPage(1)
-    const viewport = first.getViewport({ scale: 1 })
-    this.ratio = viewport.height / viewport.width
-    this.fitWidth = Math.max(320, Math.min(1180, this.options.scroll.clientWidth - 56))
-    this.pageWidth = this.fitWidth
-    this.buildShells(viewport.width, viewport.height)
-    this.attachObservers()
-    this.options.loading.classList.add('hidden')
-    this.options.onStatus?.(`${doc.numPages} 页`)
-    this.setCurrent(1)
-    await this.renderPage(1)
+      const first = await doc.getPage(1)
+      if (this.destroyed || serial !== this.loadSerial) {
+        await discard()
+        return
+      }
+      const viewport = first.getViewport({ scale: 1 })
+      this.ratio = viewport.height / viewport.width
+      this.fitWidth = Math.max(320, Math.min(1180, this.options.scroll.clientWidth - 56))
+      this.pageWidth = this.fitWidth
+      this.buildShells(viewport.width, viewport.height)
+      this.attachObservers()
+      this.options.loading.classList.add('hidden')
+      this.options.onStatus?.(`${doc.numPages} 页`)
+      this.setCurrent(1)
+      await this.renderPage(1)
+    } catch (error) {
+      const stale = this.destroyed || serial !== this.loadSerial
+      if (task) {
+        if (this.loadTask === task) this.loadTask = undefined
+        await destroyTask(task)
+      }
+      // Only the current load reports its failure; stale loads clean up quietly.
+      if (stale) return
+      this.options.loading.classList.add('hidden')
+      throw error
+    }
   }
 
   destroy(): void {
     this.destroyed = true
     this.renderGeneration += 1
+    this.loadSerial += 1
     this.observer?.disconnect()
     this.observer = undefined
     this.resizeObserver?.disconnect()
@@ -114,9 +174,10 @@ export class PdfViewer {
     this.scrollHandler = undefined
     if (this.scrollFrame) cancelAnimationFrame(this.scrollFrame)
     this.scrollFrame = 0
-    const doc = this.doc
+    const task = this.loadTask
+    this.loadTask = undefined
     this.doc = undefined
-    if (doc) void doc.destroy().catch(() => {})
+    if (task) void destroyTask(task)
     this.shells = []
     this.rendered.clear()
     this.options.pages.replaceChildren()
@@ -141,6 +202,68 @@ export class PdfViewer {
 
   clearPageData(): void {
     this.dataCache.clear()
+    for (const shell of this.shells) {
+      shell.querySelector<HTMLElement>('.pdf-block-layer')?.replaceChildren()
+    }
+    void this.refreshVisibleBlocks()
+  }
+
+  /**
+   * Extract the current browser selection when it overlaps the parsed block
+   * overlay. Selecting sidebar text (or nothing) returns null so the chat panel
+   * keeps the last explicit PDF selection.
+   */
+  getSelection(): PdfSelection | null {
+    const selection = window.getSelection()
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+    const range = selection.getRangeAt(0)
+    const text = normalizeSelectionText(selection.toString())
+    if (!text) return null
+    const hits: HTMLElement[] = []
+    for (const node of this.options.pages.querySelectorAll<HTMLElement>('.pdf-block-text')) {
+      let intersects = false
+      try {
+        intersects = range.intersectsNode(node)
+      } catch {
+        intersects = false
+      }
+      if (intersects) hits.push(node)
+    }
+    if (hits.length === 0) return null
+    const pages: number[] = []
+    const blockIds: string[] = []
+    const seen = new Set<string>()
+    for (const node of hits) {
+      const page = Number(node.dataset.page)
+      if (Number.isInteger(page) && page > 0) pages.push(page)
+      const blockId = node.dataset.blockId
+      if (blockId && !seen.has(blockId)) {
+        seen.add(blockId)
+        blockIds.push(blockId)
+      }
+    }
+    if (pages.length === 0) return null
+    const pageFrom = Math.min(...pages)
+    const pageTo = Math.max(...pages)
+    const truncated = text.length > MAX_SELECTION
+    return {
+      text: truncated ? `${text.slice(0, MAX_SELECTION)}…` : text,
+      page: pageFrom,
+      ...(pageFrom !== pageTo ? { pageFrom, pageTo } : {}),
+      blockIds: blockIds.slice(0, MAX_SELECTION_BLOCKS),
+    }
+  }
+
+  /** Rebuild overlays without repainting canvases (used after parsing finishes). */
+  async refreshVisibleBlocks(): Promise<void> {
+    if (this.destroyed) return
+    await Promise.all(
+      this.visiblePages().map(async (page) => {
+        const data = await this.pageData(page)
+        if (this.destroyed) return
+        this.renderBlockText(page, data)
+      }),
+    )
   }
 
   highlightPage(page: number, blockIds: string[] = []): void {
@@ -188,12 +311,14 @@ export class PdfViewer {
 
       const canvas = document.createElement('canvas')
       canvas.className = 'pdf-canvas'
+      const blocks = document.createElement('div')
+      blocks.className = 'pdf-block-layer'
       const overlay = document.createElement('div')
       overlay.className = 'pdf-highlight-layer'
       const pending = document.createElement('div')
       pending.className = 'pdf-page-pending'
       pending.textContent = `第 ${page} 页`
-      sheet.append(canvas, overlay, pending)
+      sheet.append(canvas, blocks, overlay, pending)
       shell.append(sheet)
 
       const label = document.createElement('div')
@@ -252,6 +377,7 @@ export class PdfViewer {
       }
       const pending = shell.querySelector<HTMLElement>('.pdf-page-pending')
       if (pending) pending.classList.remove('hidden')
+      shell.querySelector<HTMLElement>('.pdf-block-layer')?.replaceChildren()
     }
     void generation
     const visible = this.visiblePages()
@@ -279,6 +405,8 @@ export class PdfViewer {
     if (!shell) return
     this.rendered.set(page, 'rendering')
     const generation = this.renderGeneration
+    shell.querySelector<HTMLElement>('.pdf-block-layer')?.replaceChildren()
+    const dataPromise = this.pageData(page)
     try {
       const pdfPage = await this.doc.getPage(page)
       if (this.destroyed || generation !== this.renderGeneration) return
@@ -305,11 +433,50 @@ export class PdfViewer {
       if (this.destroyed || generation !== this.renderGeneration) return
       this.rendered.set(page, 'done')
       pending?.classList.add('hidden')
+      const data = await dataPromise
+      if (this.destroyed || generation !== this.renderGeneration) return
+      this.renderBlockText(page, data)
     } catch (error) {
       this.rendered.delete(page)
       const pending = shell.querySelector<HTMLElement>('.pdf-page-pending')
       if (pending) pending.textContent = '这一页渲染失败'
       this.options.onError?.(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  /**
+   * Lay transparent, selectable text over the page image. MinerU gives us one
+   * bbox per block, so each block becomes one selectable node regardless of
+   * whether the PDF has an embedded text layer (scanned books often have none).
+   */
+  private renderBlockText(page: number, data: PageData | null): void {
+    const shell = this.shells[page - 1]
+    const layer = shell?.querySelector<HTMLElement>('.pdf-block-layer')
+    if (!layer) return
+    layer.replaceChildren()
+    if (!data || data.blocks.length === 0) return
+    const width = shell?.clientWidth || this.pageWidth
+    const height = shell?.clientHeight || Math.round(width * this.ratio)
+    if (!(width > 0) || !(height > 0)) return
+    for (const block of data.blocks) {
+      const text = String(block.text ?? '').trim()
+      if (!text) continue
+      const [x0, y0, x1, y1] = block.bbox
+      if (!(x1 > x0 && y1 > y0)) continue
+      const boxWidth = ((x1 - x0) / 1000) * width
+      const boxHeight = ((y1 - y0) / 1000) * height
+      if (boxWidth < 3 || boxHeight < 3) continue
+      const node = document.createElement('div')
+      node.className = 'pdf-block-text'
+      node.dataset.blockId = block.id
+      node.dataset.page = String(page)
+      node.style.left = `${x0 / 10}%`
+      node.style.top = `${y0 / 10}%`
+      node.style.width = `${(x1 - x0) / 10}%`
+      node.style.height = `${(y1 - y0) / 10}%`
+      node.style.fontSize = `${estimateBlockFontSize(text, boxWidth, boxHeight)}px`
+      node.textContent = text
+      layer.append(node)
     }
   }
 
@@ -360,4 +527,18 @@ export class PdfViewer {
     if (selected.length === 0) this.options.onError?.(new Error('没有可高亮的内容块。'))
     else setTimeout(() => shell?.scrollIntoView({ block: 'start', behavior: 'auto' }), 30)
   }
+}
+
+/** Fit a block's text into its bbox well enough to keep the selectable area aligned. */
+function estimateBlockFontSize(text: string, width: number, height: number): number {
+  const length = Math.max(1, text.replace(/\s+/g, ' ').length)
+  const areaFit = Math.sqrt((width * height) / (0.62 * length))
+  const heightFit = height * 0.7
+  return Math.max(6, Math.min(18, Math.min(areaFit, heightFit)))
+}
+
+function normalizeSelectionText(value: string): string {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
 }

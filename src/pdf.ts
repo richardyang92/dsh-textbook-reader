@@ -7,8 +7,13 @@ import { PDFDocument } from 'pdf-lib'
 import { AppError, tooLarge, unprocessable } from './errors.js'
 
 export const MAX_PDF_BYTES = 200 * 1024 * 1024
-/** MinerU's documented page ceiling for one task. */
-export const MAX_PAGES_PER_TASK = 600
+/**
+ * Largest PDF MinerU accepts in one task. The docs mention 600 for some models,
+ * but the API rejects the task with "number of pages exceeds limit (200 pages)",
+ * so split at the observed ceiling and let the parse manager halve again if the
+ * limit ever changes.
+ */
+export const MAX_PAGES_PER_TASK = 200
 
 export interface PdfInfo {
   pages: number
@@ -77,7 +82,7 @@ export async function sha256File(filePath: string): Promise<string> {
   return hash.digest('hex')
 }
 
-/** Plan page ranges for >600-page PDFs; each range is inclusive and 1-based. */
+/** Plan page ranges above the per-task ceiling; each range is inclusive and 1-based. */
 export function planPageRanges(pages: number, maxPerTask = MAX_PAGES_PER_TASK): Array<{ from: number; to: number }> {
   if (!Number.isInteger(pages) || pages <= 0) return []
   if (!Number.isInteger(maxPerTask) || maxPerTask <= 0) throw new RangeError('maxPerTask must be positive')
@@ -88,7 +93,7 @@ export function planPageRanges(pages: number, maxPerTask = MAX_PAGES_PER_TASK): 
   return ranges
 }
 
-/** MinerU page_ranges string: comma-separated ranges, e.g. `1-600,601-1200`. */
+/** MinerU page_ranges string: comma-separated ranges, e.g. `1-200,201-400`. */
 export function formatPageRanges(ranges: Array<{ from: number; to: number }>): string {
   return ranges.map(({ from, to }) => (from === to ? String(from) : `${from}-${to}`)).join(',')
 }

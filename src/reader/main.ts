@@ -22,7 +22,11 @@ import {
   type Tree,
   type TreeNode,
 } from './api.js'
-import { PdfViewer } from './pdf.js'
+import { PdfViewer, type PdfSelection } from './pdf.js'
+
+/** Prompt prefilled when the user asks about the current PDF selection. */
+const SELECTION_PROMPT =
+  '解释选中的这段内容：先引用原文，再逐句解释关键词和它在上下文里的作用，最后用一个问题检查我是否理解。'
 
 interface State {
   books: BookSummary[]
@@ -35,6 +39,8 @@ interface State {
   currentPage: number
   opening: boolean
   embedded: boolean
+  selection: PdfSelection | null
+  selectionTimer: number | null
   parseTimer: number | null
   pageSaveTimer: number | null
   bannerTimer: number | null
@@ -58,6 +64,8 @@ const state: State = {
   currentPage: 1,
   opening: false,
   embedded: window.parent !== window,
+  selection: null,
+  selectionTimer: null,
   parseTimer: null,
   pageSaveTimer: null,
   bannerTimer: null,
@@ -296,9 +304,17 @@ function setLibraryVisible(visible: boolean): void {
   $('back-to-library').classList.toggle('hidden', visible)
 }
 
+/** Embedded split view: the side panel is an overlay drawer, closed by default. */
+function setSideOpen(open: boolean): void {
+  document.querySelector('.reader-side')?.classList.toggle('open', open)
+  $('side-backdrop').classList.toggle('hidden', !open)
+  if (open) window.requestAnimationFrame(() => updateTreeCurrent())
+}
+
 async function openBook(id: string, options: { page?: number; blocks?: string[] } = {}): Promise<void> {
   try {
     state.opening = true
+    clearReaderSelection({ post: false })
     stopParsePolling()
     if (state.pageSaveTimer !== null) {
       clearTimeout(state.pageSaveTimer)
@@ -317,6 +333,7 @@ async function openBook(id: string, options: { page?: number; blocks?: string[] 
     }).catch(() => {})
 
     setLibraryVisible(false)
+    setSideOpen(false)
     $('book-title').textContent = detail.book.title
     $('book-pages').textContent = `${detail.book.pages} 页`
     $('book-size').textContent = formatBytes(detail.book.bytes)
@@ -341,6 +358,7 @@ async function openBook(id: string, options: { page?: number; blocks?: string[] 
     $('zoom-label').textContent = viewer.zoomLabel
     state.opening = false
     $('global-status').textContent = ''
+    postContext()
     if (detail.book.parse.status === 'done') {
       showBanner('', '')
     }
@@ -356,6 +374,7 @@ async function openBook(id: string, options: { page?: number; blocks?: string[] 
 
 function showLibrary(): void {
   stopParsePolling()
+  clearReaderSelection({ post: false })
   if (state.pageSaveTimer !== null) {
     clearTimeout(state.pageSaveTimer)
     state.pageSaveTimer = null
@@ -364,7 +383,9 @@ function showLibrary(): void {
   state.tree = null
   state.progress = null
   state.viewer.destroy()
+  postContext()
   setLibraryVisible(true)
+  setSideOpen(false)
   updateUrl({})
   void loadBooks()
   void loadConfig()
@@ -387,6 +408,120 @@ function handleViewerPage(page: number): void {
   $('page-total').textContent = String(state.book.pages)
   if (!state.opening) schedulePageSave()
   renderProgressSummary()
+  postContext()
+  updateTreeCurrent()
+}
+
+/** Publish the reading position to the hosting client panel. */
+function postContext(): void {
+  if (!state.embedded) return
+  if (!state.book) {
+    window.parent.postMessage({ type: 'tbr:context', context: null }, '*')
+    return
+  }
+  const node = currentSection(state.currentPage)
+  window.parent.postMessage(
+    {
+      type: 'tbr:context',
+      context: {
+        bookId: state.book.id,
+        bookTitle: state.book.title,
+        page: state.currentPage,
+        pageCount: state.book.pages,
+        ...(node ? { nodeId: node.id, nodeTitle: node.title } : {}),
+        ...(state.selection ? { selection: state.selection } : {}),
+      },
+    },
+    '*',
+  )
+}
+
+function scheduleSelectionRefresh(delay = 120): void {
+  if (state.selectionTimer !== null) clearTimeout(state.selectionTimer)
+  state.selectionTimer = window.setTimeout(() => {
+    state.selectionTimer = null
+    refreshSelection()
+  }, delay)
+}
+
+/**
+ * Keep the last explicitly committed PDF selection. A collapsed browser
+ * selection (e.g. after clicking into the chat input) only hides the floating
+ * toolbar; it must not silently drop the text the user already sent to chat.
+ */
+function refreshSelection(): void {
+  if (state.selectionTimer !== null) {
+    clearTimeout(state.selectionTimer)
+    state.selectionTimer = null
+  }
+  if (!state.book || !state.embedded) {
+    hideSelectionToolbar()
+    return
+  }
+  const live = state.viewer.getSelection()
+  if (!live) {
+    hideSelectionToolbar()
+    return
+  }
+  if (!sameSelection(live, state.selection)) {
+    state.selection = live
+    postContext()
+  }
+  showSelectionToolbar(live)
+}
+
+function showSelectionToolbar(selection: PdfSelection): void {
+  if (!state.embedded) return
+  const toolbar = $('selection-toolbar')
+  $('selection-summary').textContent = `已选中 ${selection.text.length} 字`
+  toolbar.classList.remove('hidden')
+  const current = window.getSelection()
+  const range = current && current.rangeCount > 0 ? current.getRangeAt(0) : undefined
+  const rects = range ? Array.from(range.getClientRects()) : []
+  const rect = rects.length > 0 ? rects[rects.length - 1]! : range?.getBoundingClientRect()
+  const width = toolbar.offsetWidth || 200
+  const height = toolbar.offsetHeight || 34
+  const left = rect ? rect.left : 20
+  const top = rect ? rect.bottom + 8 : 60
+  toolbar.style.left = `${Math.min(window.innerWidth - width - 8, Math.max(8, left))}px`
+  toolbar.style.top = `${Math.min(window.innerHeight - height - 8, Math.max(8, top))}px`
+}
+
+function hideSelectionToolbar(): void {
+  $('selection-toolbar').classList.add('hidden')
+}
+
+/** Explicitly drop the committed selection, in the reader and the chat panel. */
+function clearReaderSelection(options: { post?: boolean; removeDom?: boolean } = {}): void {
+  if (state.selectionTimer !== null) {
+    clearTimeout(state.selectionTimer)
+    state.selectionTimer = null
+  }
+  state.selection = null
+  hideSelectionToolbar()
+  if (options.removeDom !== false) window.getSelection()?.removeAllRanges()
+  if (options.post !== false) postContext()
+}
+
+function sameSelection(left: PdfSelection | null, right: PdfSelection | null): boolean {
+  if (!left || !right) return left === right
+  return (
+    left.text === right.text &&
+    left.page === right.page &&
+    left.pageFrom === right.pageFrom &&
+    left.pageTo === right.pageTo &&
+    left.blockIds.join(',') === right.blockIds.join(',')
+  )
+}
+
+function currentSection(page: number): TreeNode | undefined {
+  const tree = state.tree
+  if (!tree) return undefined
+  const section = tree.nodes.find(
+    (node) => node.level === 2 && page >= node.pageStart && page <= node.pageEnd,
+  )
+  if (section) return section
+  return tree.nodes.find((node) => node.level === 1 && page >= node.pageStart && page <= node.pageEnd)
 }
 
 function schedulePageSave(): void {
@@ -451,31 +586,39 @@ function renderTree(): void {
   const chapters = tree.nodes.filter((node) => node.level === 1).sort((a, b) => a.pageStart - b.pageStart)
   const sections = tree.nodes.filter((node) => node.level === 2)
   $('tree-count').textContent = `${chapters.length} 章 · ${sections.length} 节`
-  const read = new Set(state.progress?.readChapters ?? [])
+  const currentId = currentSection(state.currentPage)?.id
   for (const [chapterIndex, chapter] of chapters.entries()) {
-    host.append(treeRow(chapter, chapterIndex, -1, read, true))
-    for (const [sectionIndex, childId] of chapter.children.entries()) {
+    host.append(treeRow(chapter, chapterIndex, currentId, true))
+    for (const childId of chapter.children) {
       const child = tree.nodes.find((node) => node.id === childId)
-      if (child) host.append(treeRow(child, chapterIndex, sectionIndex, read, false))
+      if (child) host.append(treeRow(child, chapterIndex, currentId, false))
     }
+  }
+  updateTreeCurrent()
+}
+
+/** Highlight and reveal the node that contains the page currently being read. */
+function updateTreeCurrent(): void {
+  const host = $('tree')
+  const currentId = currentSection(state.currentPage)?.id
+  const side = document.querySelector('.reader-side')
+  const visible = !state.embedded || side?.classList.contains('open') === true
+  for (const row of host.querySelectorAll<HTMLElement>('.tree-row')) {
+    const on = currentId !== undefined && row.dataset.nodeId === currentId
+    row.classList.toggle('current', on)
+    if (on && visible) row.scrollIntoView({ block: 'nearest' })
   }
 }
 
 function treeRow(
   node: TreeNode,
   chapterIndex: number,
-  sectionIndex: number,
-  read: Set<string>,
+  currentId: string | undefined,
   isChapter: boolean,
 ): HTMLElement {
   const row = el('div', `tree-row${isChapter ? ' chapter' : ' section'}`)
-  const checkbox = document.createElement('input')
-  checkbox.type = 'checkbox'
-  checkbox.className = 'read-check'
-  checkbox.checked = read.has(node.id)
-  checkbox.title = '标记为已读'
-  checkbox.addEventListener('change', () => toggleRead(node.id))
-  row.append(checkbox)
+  row.dataset.nodeId = node.id
+  if (node.id === currentId) row.classList.add('current')
 
   const main = el('button', 'tree-main')
   main.type = 'button'
@@ -519,7 +662,6 @@ function treeRow(
   })
   actions.append(level)
   row.append(actions)
-  void sectionIndex
   return row
 }
 
@@ -537,16 +679,6 @@ async function treeOp(body: Record<string, unknown>): Promise<void> {
   } catch (error) {
     showError(error)
   }
-}
-
-function toggleRead(nodeId: string): void {
-  if (!state.progress) return
-  const set = new Set(state.progress.readChapters)
-  if (set.has(nodeId)) set.delete(nodeId)
-  else set.add(nodeId)
-  state.progress.readChapters = [...set]
-  renderProgressSummary()
-  void saveProgress(false)
 }
 
 // ── Progress / questions ───────────────────────────────────────────────────
@@ -679,14 +811,15 @@ function renderParse(book: Book): void {
   const pill = $('parse-pill')
   pill.textContent = statusText(parse.status)
   pill.className = `pill${done ? ' ok' : parse.status === 'failed' ? ' err' : ''}`
+  const row = button.closest('.reader-parse-row') as HTMLElement | null
+  row?.classList.toggle('hidden', done)
   const box = $('parse-error')
   if (parse.error) {
     box.className = 'banner error'
     box.textContent = parse.error.message + (parse.error.hint ? `\n${parse.error.hint}` : '')
-  } else if (parse.warnings.length > 0) {
-    box.className = 'banner'
-    box.textContent = parse.warnings.join('\n')
   } else {
+    // Segment warnings are diagnostic noise for a finished book; keep the
+    // sidebar focused on reading.
     box.className = 'banner error hidden'
     box.textContent = ''
   }
@@ -736,8 +869,10 @@ function startParsePolling(): void {
           if (!state.book) return
           if (data.parse.status === 'done') {
             await loadTree()
+            clearReaderSelection({ post: false })
             state.viewer.clearPageData()
             await loadBooks()
+            postContext()
             showBanner('MinerU 解析完成，章节树已更新。', 'ok', 5000)
           }
         }
@@ -780,9 +915,17 @@ async function jumpToPage(page: number, blocks: string[] = []): Promise<void> {
   input.value = String(target)
   state.opening = false
   schedulePageSave()
+  postContext()
+  updateTreeCurrent()
+  setSideOpen(false)
 }
 
 function bindEvents(): void {
+  $('toggle-side').addEventListener('click', () => {
+    const open = document.querySelector('.reader-side')?.classList.contains('open') ?? false
+    setSideOpen(!open)
+  })
+  $('side-backdrop').addEventListener('click', () => setSideOpen(false))
   $('refresh').addEventListener('click', () => {
     if (state.book) {
       const bookId = state.book.id
@@ -806,6 +949,9 @@ function bindEvents(): void {
   $('back-to-chat').addEventListener('click', () => {
     if (state.embedded) window.parent.postMessage({ type: 'tbr:back' }, '*')
   })
+  $('chat-toggle').addEventListener('click', () => {
+    if (state.embedded) window.parent.postMessage({ type: 'tbr:chat-open' }, '*')
+  })
   $('parse').addEventListener('click', () => void startParse())
   $('question-add').addEventListener('click', () => addQuestion())
   $('question-input').addEventListener('keydown', (event) => {
@@ -818,16 +964,35 @@ function bindEvents(): void {
     if (Number.isInteger(value)) void jumpToPage(value)
   })
   $('zoom-in').addEventListener('click', () => {
+    clearReaderSelection({ post: false })
     state.viewer.zoomBy(0.15)
     $('zoom-label').textContent = state.viewer.zoomLabel
   })
   $('zoom-out').addEventListener('click', () => {
+    clearReaderSelection({ post: false })
     state.viewer.zoomBy(-0.15)
     $('zoom-label').textContent = state.viewer.zoomLabel
   })
   $('zoom-fit').addEventListener('click', () => {
+    clearReaderSelection({ post: false })
     state.viewer.fit()
     $('zoom-label').textContent = state.viewer.zoomLabel
+  })
+  $('selection-toolbar').addEventListener('pointerdown', (event) => event.preventDefault())
+  $('selection-ask').addEventListener('click', () => {
+    if (!state.embedded || !state.selection) return
+    window.parent.postMessage(
+      { type: 'tbr:ask', prompt: SELECTION_PROMPT, selection: state.selection },
+      '*',
+    )
+  })
+  $('selection-clear').addEventListener('click', () => clearReaderSelection())
+  $('pdf-scroll').addEventListener('scroll', () => hideSelectionToolbar(), { passive: true })
+  document.addEventListener('selectionchange', () => scheduleSelectionRefresh(120))
+  document.addEventListener('pointerup', () => scheduleSelectionRefresh(0))
+  document.addEventListener('keyup', () => scheduleSelectionRefresh(0))
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && state.selection) clearReaderSelection()
   })
   window.addEventListener('beforeunload', () => flushProgress())
   document.addEventListener('visibilitychange', () => {
@@ -851,8 +1016,13 @@ function bindEvents(): void {
       })()
     } else if (data.type === 'tbr:open-library') {
       showLibrary()
+    } else if (data.type === 'tbr:chat-state') {
+      $('chat-toggle').classList.toggle('hidden', data.collapsed !== true)
+    } else if (data.type === 'tbr:clear-selection') {
+      clearReaderSelection()
     } else if (data.type === 'tbr:ping') {
       window.parent.postMessage({ type: 'tbr:ready' }, '*')
+      postContext()
     }
   })
 }
@@ -861,8 +1031,12 @@ function bindEvents(): void {
 
 async function boot(): Promise<void> {
   state.viewer = createViewer()
-  $('back-to-chat').classList.toggle('hidden', !state.embedded)
+  $('back-to-chat').classList.add('hidden')
   $('back-to-library').classList.add('hidden')
+  if (state.embedded) {
+    document.querySelector('.app')?.classList.add('embedded')
+    $('toggle-side').classList.remove('hidden')
+  }
   bindEvents()
   setLibraryVisible(true)
   await Promise.all([loadConfig(), loadBooks()])

@@ -54,5 +54,5 @@ pnpm probe:mineru --pdf /path/to/one-page.pdf
 ## 当前未完成
 
 - 真实 ≥400 页教材（需要 token + 样书）；
-- >600 页本地分段（M5 已完成，见 VERIFY-M5）；
+- >200 页本地分段（M5 已完成，见 VERIFY-M5）；
 - 章节树手动修正（M3）。

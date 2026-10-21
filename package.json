@@ -1,8 +1,17 @@
 {
   "name": "dsh-textbook-reader",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "教材伴读 (Textbook Reader) for DeepSeek Harness: MinerU-parsed PDF textbook library, auto chapter tree, page-anchored citations with a built-in pdf.js reader, and cross-session learning progress.",
   "type": "module",
+  "author": "richardyang92 (https://github.com/richardyang92)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/richardyang92/dsh-textbook-reader.git"
+  },
+  "homepage": "https://github.com/richardyang92/dsh-textbook-reader#readme",
+  "bugs": {
+    "url": "https://github.com/richardyang92/dsh-textbook-reader/issues"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -33,7 +42,8 @@
     "presets",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -42,7 +52,9 @@
     "test": "node --test --test-concurrency=1 test/*.test.mjs",
     "dev:reader": "node scripts/dev-server.mjs",
     "seed:demo": "node scripts/seed-m2-demo.mjs",
-    "probe:mineru": "node scripts/mineru-probe.mjs"
+    "probe:mineru": "node scripts/mineru-probe.mjs",
+    "chat:spike": "node scripts/chat-spike.mjs",
+    "chat:migrate-sessions": "node scripts/migrate-chat-sessions.mjs"
   },
   "keywords": [
     "dsh",

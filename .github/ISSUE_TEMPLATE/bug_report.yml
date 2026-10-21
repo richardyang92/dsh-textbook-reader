@@ -1,0 +1,62 @@
+name: Bug report
+description: Something is broken or behaves unexpectedly.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please remove tokens, real book text and personal
+        absolute paths before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.6.0 or commit sha"
+    validations:
+      required: true
+  - type: input
+    id: dsh
+    attributes:
+      label: DSH and Node versions
+      placeholder: "DSH 0.2.x, Node 22.23.1, pnpm 11.22.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Reader / pdf.js
+        - MinerU parsing
+        - Chapter tree
+        - Citations / reader bridge
+        - Learning progress
+        - Chat / agent tools
+        - Install / build
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and error output
+      description: Include the structured error code if present. Redact tokens and book text.
+    validations:
+      required: true

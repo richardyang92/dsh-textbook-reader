@@ -15,6 +15,9 @@ import { ProgressStore } from './store/progress.js'
 import { TreeStore } from './store/tree.js'
 import { ParseManager, type MineruApi } from './mineru/job.js'
 import { ReaderRouter, type ReaderLogger } from './http/router.js'
+import { BookChatService } from './chat/service.js'
+import { SubagentChatBackend } from './chat/subagent-backend.js'
+import { registerTutorPreset, TUTOR_PRESET_ID, type PresetContextLike } from './chat/tutor-preset.js'
 import { registerTextbookTools, type ToolRegistryLike } from './tools/index.js'
 import { TEXTBOOK_GUIDANCE } from './prompt.js'
 
@@ -31,6 +34,7 @@ export interface ReaderRuntime {
   tree: TreeStore
   parser: ParseManager
   router: ReaderRouter
+  chat?: BookChatService
   /** Reader origin advertised to agent tools, filled when webServer is present. */
   baseUrl?: string
 }
@@ -54,6 +58,7 @@ export function createReaderRuntime(options: {
   readerRoot?: string
   connection?: ConnectionLike
   mineruClient?: MineruApi
+  chat?: BookChatService
   logger?: ReaderLogger
 } = {}): ReaderRuntime {
   const paths = dataPaths(options.dataRoot)
@@ -100,11 +105,21 @@ export function createReaderRuntime(options: {
     progress,
     tree,
     parser,
+    ...(options.chat ? { chat: options.chat } : {}),
     ...(options.readerRoot ? { readerRoot: options.readerRoot } : {}),
     ...(options.connection ? { connection: options.connection } : {}),
     ...(logger ? { logger } : {}),
   })
-  return { paths, config, books, progress, tree, parser, router }
+  return {
+    paths,
+    config,
+    books,
+    progress,
+    tree,
+    parser,
+    router,
+    ...(options.chat ? { chat: options.chat } : {}),
+  }
 }
 
 /**
@@ -118,6 +133,31 @@ export function apply(ctx: Context): void {
     error: (message) => safeLog(ctx, 'error', message),
   }
   const runtime = createReaderRuntime({ logger })
+  const chatBackend = new SubagentChatBackend({
+    ctx,
+    paths: runtime.paths,
+    agentPreset: TUTOR_PRESET_ID,
+    logger,
+  })
+  const chat = new BookChatService({
+    paths: runtime.paths,
+    backend: chatBackend,
+    logger,
+  })
+  runtime.chat = chat
+  runtime.router.attachChat(chat)
+  ctx.inject(['agentPresets'], (scoped) => {
+    const dispose = registerTutorPreset(scoped as unknown as PresetContextLike)
+    scoped.effect(() => () => dispose())
+  })
+  // Register the dedicated tutor workspace as soon as DSH exposes it, so book
+  // sessions are grouped under「教材伴读」instead of falling into 未分组.
+  ctx.inject(['workspaceRegistry'], (scoped) => {
+    void chatBackend.ensureWorkspace(scoped.get?.('workspaceRegistry'))
+  })
+  ctx.effect(() => () => {
+    void chat.dispose()
+  })
   ctx.effect(() => () => runtime.parser.dispose())
   void runtime.parser.recover().catch((error: unknown) => {
     safeLog(

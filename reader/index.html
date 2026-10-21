@@ -12,15 +12,38 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">📘</span>
+        <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          <path d="M8 7h8M8 11h6"></path>
+        </svg>
         <h1>教材伴读</h1>
-        <span class="badge">M5</span>
       </div>
       <div class="top-actions">
         <span id="global-status" class="muted small"></span>
-        <button id="back-to-library" class="ghost hidden" type="button">← 书架</button>
-        <button id="back-to-chat" class="ghost hidden" type="button">← 对话</button>
-        <button id="refresh" class="ghost" type="button">刷新</button>
+        <button id="back-to-library" class="ghost icon-button hidden" type="button" title="书架" aria-label="书架">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+            <path d="M8 7h8M8 11h6"></path>
+          </svg>
+        </button>
+        <button id="back-to-chat" class="ghost icon-button hidden" type="button" title="关闭阅读器" aria-label="关闭阅读器">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18"></path>
+          </svg>
+        </button>
+        <button id="chat-toggle" class="ghost icon-button hidden" type="button" title="展开 AI 伴读" aria-label="展开 AI 伴读">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+        </button>
+        <button id="refresh" class="ghost icon-button" type="button" title="刷新" aria-label="刷新">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+            <path d="M21 3v6h-6"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -90,7 +113,7 @@
           <div id="tree" class="tree"></div>
         </section>
 
-        <details id="progress-block" class="side-block progress-block" open>
+        <details id="progress-block" class="side-block progress-block hidden">
           <summary>学习进度</summary>
           <div id="progress-summary" class="progress-summary"></div>
           <div class="side-heading small">每章掌握度</div>
@@ -105,8 +128,11 @@
         </details>
       </aside>
 
+      <div id="side-backdrop" class="side-backdrop hidden"></div>
+
       <section class="pdf-panel">
         <div class="pdf-toolbar">
+          <button id="toggle-side" class="ghost hidden" type="button" title="目录与进度">目录</button>
           <button id="prev-page" type="button">上一页</button>
           <button id="next-page" type="button">下一页</button>
           <label class="page-jump">第 <input id="page-input" type="number" min="1" step="1"> / <span id="page-total">–</span> 页</label>
@@ -123,6 +149,12 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="selection-toolbar" class="selection-toolbar hidden" role="toolbar" aria-label="选中文字操作">
+    <span id="selection-summary" class="selection-summary">已选中</span>
+    <button id="selection-ask" class="selection-ask" type="button" title="把选中原文带入 AI 伴读">问 AI</button>
+    <button id="selection-clear" class="ghost" type="button" title="清除选中" aria-label="清除选中">×</button>
   </div>
 
   <script type="module" src="/textbook-reader/assets/app.js"></script>

@@ -45,6 +45,9 @@ export async function buildReader() {
   await copyFile(join(pdfjsRoot, 'LICENSE'), join(vendor, 'pdfjs.LICENSE'))
   await cp(join(pdfjsRoot, 'cmaps'), join(vendor, 'cmaps'), { recursive: true })
   await cp(join(pdfjsRoot, 'standard_fonts'), join(vendor, 'standard_fonts'), { recursive: true })
+  // pdf.js decodes JPX/JBIG2/ICC in WebAssembly. Scanned textbooks encoded with
+  // JPXDecode (very common) render blank white pages without these files.
+  await cp(join(pdfjsRoot, 'wasm'), join(vendor, 'wasm'), { recursive: true })
 
   const info = await stat(join(vendor, 'pdf.min.mjs'))
   console.log(`[build] reader -> reader/assets/app.js; pdf.js vendor ${Math.round(info.size / 1024)} KB`)

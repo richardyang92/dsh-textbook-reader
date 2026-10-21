@@ -24,7 +24,7 @@ import { generateTree } from '../tree/generate.js'
 import { MineruClient, type BatchFile, type BatchStatus, type UploadRequest } from './client.js'
 import { discoverArtifacts } from './discover.js'
 import { normalizeArtifacts } from './normalize.js'
-import { splitPdf, type SplitPart } from './split.js'
+import { splitPdf } from './split.js'
 import { extractZip } from './zip.js'
 
 const POLL_INTERVAL_MS = 4_000
@@ -54,7 +54,7 @@ export interface ParseManagerOptions {
   logger?: ParseLogger
   pollIntervalMs?: number
   maxPollMs?: number
-  /** Override MinerU's 600-page task ceiling (tests use a small value). */
+  /** Override MinerU's per-task page ceiling (tests use a small value). */
   maxPagesPerTask?: number
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>
   now?: () => number
@@ -249,7 +249,7 @@ export class ParseManager {
       warnings: state.warnings,
     })
     const segmentsDir = join(parseDir, 'segments')
-    const parts = await splitPdf(this.books.pdfFile(book.id), ranges, segmentsDir)
+    const queue = [...ranges]
     const mergedPages: NormalizedPage[] = []
     let mergedHeadings: Heading[] = []
     let backend: string | undefined
@@ -258,60 +258,88 @@ export class ParseManager {
     let firstLayout: string | undefined
     let firstMarkdown: string | undefined
     let stats = { blocks: 0, textBlocks: 0, titleBlocks: 0, images: 0, tables: 0 }
+    let partNo = 0
 
     try {
-      for (const [index, part] of parts.entries()) {
+      while (queue.length > 0) {
         throwIfAborted(signal)
-        const start = 3 + (index / parts.length) * 90
-        const end = 3 + ((index + 1) / parts.length) * 90
-        const normalized = await this.parseOne({
-          bookId: book.id,
-          token,
-          signal,
-          state,
-          sourceFile: part.file,
-          fileName: `${book.id}-part-${part.index}.pdf`,
-          dataId: `${book.id}-p${part.index}`,
-          pages: part.pages,
-          rawDir: join(parseDir, 'raw', `segment-${part.index}`),
-          zipPath: join(parseDir, `segment-${part.index}.zip`),
-          progressStart: start,
-          progressEnd: end,
-        })
-        const offset = part.range.from - 1
-        const prefix = `s${part.index}-`
-        for (const page of normalized.pages) {
-          const shifted: NormalizedPage = {
-            ...page,
-            page: page.page + offset,
-            blocks: page.blocks.map((block) => ({
-              ...block,
-              id: prefix + block.id,
-              page: block.page + offset,
-            })),
-          }
-          mergedPages.push(shifted)
-        }
-        for (const heading of normalized.headings) {
-          mergedHeadings.push({
-            ...heading,
-            blockId: prefix + heading.blockId,
-            page: heading.page + offset,
+        const range = queue.shift()!
+        partNo += 1
+        // splitPdf numbers its output files per directory; give every attempt
+        // its own directory and keep the global counter for ids and artifacts.
+        const [part] = await splitPdf(this.books.pdfFile(book.id), [range], join(segmentsDir, `part-${partNo}`))
+        const start = 3 + (mergedPages.length / book.pages) * 90
+        const end = 3 + (Math.min(book.pages, mergedPages.length + part.pages) / book.pages) * 90
+        try {
+          const normalized = await this.parseOne({
+            bookId: book.id,
+            token,
+            signal,
+            state,
+            sourceFile: part.file,
+            fileName: `${book.id}-part-${partNo}.pdf`,
+            dataId: `${book.id}-p${partNo}`,
+            pages: part.pages,
+            rawDir: join(parseDir, 'raw', `segment-${partNo}`),
+            zipPath: join(parseDir, `segment-${partNo}.zip`),
+            progressStart: start,
+            progressEnd: end,
           })
+          const offset = range.from - 1
+          const prefix = `s${partNo}-`
+          for (const page of normalized.pages) {
+            const shifted: NormalizedPage = {
+              ...page,
+              page: page.page + offset,
+              blocks: page.blocks.map((block) => ({
+                ...block,
+                id: prefix + block.id,
+                page: block.page + offset,
+              })),
+            }
+            mergedPages.push(shifted)
+          }
+          for (const heading of normalized.headings) {
+            mergedHeadings.push({
+              ...heading,
+              blockId: prefix + heading.blockId,
+              page: heading.page + offset,
+            })
+          }
+          stats = {
+            blocks: stats.blocks + normalized.stats.blocks,
+            textBlocks: stats.textBlocks + normalized.stats.textBlocks,
+            titleBlocks: stats.titleBlocks + normalized.stats.titleBlocks,
+            images: stats.images + normalized.stats.images,
+            tables: stats.tables + normalized.stats.tables,
+          }
+          backend ??= normalized.source.backend
+          versionName ??= normalized.source.versionName
+          firstContentList ??= normalized.source.contentListFile
+            ? `segment-${partNo}/${normalized.source.contentListFile}`
+            : undefined
+          firstLayout ??= normalized.source.layoutFile ? `segment-${partNo}/${normalized.source.layoutFile}` : undefined
+          firstMarkdown ??= normalized.source.markdownFile
+            ? `segment-${partNo}/${normalized.source.markdownFile}`
+            : undefined
+          state.warnings.push(`第 ${range.from}–${range.to} 页解析完成。`)
+        } catch (error) {
+          const pagesInRange = range.to - range.from + 1
+          if (pagesInRange > 1 && isPageLimitFailure(error)) {
+            // MinerU rejects the whole task; halve the range and try again so an
+            // unknown/lowered server limit never fails the whole textbook.
+            const mid = range.from + Math.floor(pagesInRange / 2) - 1
+            queue.unshift({ from: range.from, to: mid }, { from: mid + 1, to: range.to })
+            state.warnings.push(`MinerU 拒绝第 ${range.from}–${range.to} 页（单任务页数超限），已自动二分后重试。`)
+            await this.updateParse(book.id, {
+              status: 'preparing',
+              progress: Math.min(99, Math.max(1, Math.round(start))),
+              warnings: [...new Set(state.warnings)].slice(0, 40),
+            })
+            continue
+          }
+          throw error
         }
-        stats = {
-          blocks: stats.blocks + normalized.stats.blocks,
-          textBlocks: stats.textBlocks + normalized.stats.textBlocks,
-          titleBlocks: stats.titleBlocks + normalized.stats.titleBlocks,
-          images: stats.images + normalized.stats.images,
-          tables: stats.tables + normalized.stats.tables,
-        }
-        backend ??= normalized.source.backend
-        versionName ??= normalized.source.versionName
-        firstContentList ??= normalized.source.contentListFile ? `segment-${part.index}/${normalized.source.contentListFile}` : undefined
-        firstLayout ??= normalized.source.layoutFile ? `segment-${part.index}/${normalized.source.layoutFile}` : undefined
-        firstMarkdown ??= normalized.source.markdownFile ? `segment-${part.index}/${normalized.source.markdownFile}` : undefined
-        state.warnings.push(`第 ${index + 1}/${parts.length} 段（第 ${part.range.from}–${part.range.to} 页）完成。`)
       }
     } finally {
       await rm(segmentsDir, { recursive: true, force: true }).catch(() => {})
@@ -466,11 +494,14 @@ export class ParseManager {
       }
       if (file.state === 'done') return file
       if (file.state === 'failed') {
+        const limited = isPageLimitMessage(file.errMsg)
         throw new AppError(
           502,
-          'mineru_parse_failed',
+          limited ? 'mineru_page_limit' : 'mineru_parse_failed',
           file.errMsg ? `MinerU 解析失败：${file.errMsg}` : 'MinerU 解析失败。',
-          '检查 PDF 是否损坏/加密，或在 MinerU 控制台查看任务详情。',
+          limited
+            ? '单任务页数超过 MinerU 上限；分段解析会自动二分重试，若仍失败请先手动拆分 PDF。'
+            : '检查 PDF 是否损坏/加密，或在 MinerU 控制台查看任务详情。',
         )
       }
       await this.sleep(this.pollIntervalMs, signal)
@@ -552,6 +583,21 @@ function computeProgress(file: BatchFile, current: number): number {
 function isRetryable(error: unknown): boolean {
   if (!(error instanceof AppError)) return true
   return error.code === 'mineru_unreachable' || error.code === 'mineru_timeout' || error.code === 'mineru_api_error'
+}
+
+/**
+ * MinerU reports the page ceiling asynchronously as a failed task, not as an API
+ * error code, so match the message text of both shapes.
+ */
+function isPageLimitFailure(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false
+  if (error.code !== 'mineru_page_limit' && error.code !== 'mineru_parse_failed') return false
+  return /(pages?|页)/i.test(error.message) && /(limit|exceed|超过|上限)/i.test(error.message)
+}
+
+function isPageLimitMessage(message: string | undefined): boolean {
+  if (!message) return false
+  return /(pages?|页)/i.test(message) && /(limit|exceed|超过|上限)/i.test(message)
 }
 
 function abortError(): AppError {

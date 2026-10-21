@@ -268,7 +268,12 @@ function mapApiCode(code: unknown, message: string): AppError {
   const suffix = message ? `：${truncate(message, 300)}` : ''
   if (numeric === -60005) return tooLarge('MinerU 拒绝：文件超过 200 MB。')
   if (numeric === -60006) {
-    return new AppError(422, 'mineru_page_limit', `MinerU 拒绝：文件超过 600 页${suffix}。`, 'M5 会支持本地分段；当前请先拆分 PDF。')
+    return new AppError(
+      422,
+      'mineru_page_limit',
+      `MinerU 拒绝：单个任务页数超过上限（当前 200 页）${suffix}。`,
+      '插件会自动按 200 页本地分段；若仍失败，可先手动拆分 PDF。',
+    )
   }
   if (numeric === -60003 || numeric === -60004 || numeric === -60002) {
     return unprocessable('mineru_pdf_invalid', `MinerU 无法读取该 PDF${suffix}。`)

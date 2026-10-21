@@ -17,12 +17,19 @@ data/
 *.token
 mineru-token
 config.json
+.env
+.env.*
 *.zip
 *.pdf
 *.jsonl
 test/.tmp/
 test/tmp/
 tmp/
+
+# Local privacy backups
+.git-backup/
+*.bundle
+docs/screenshots/.sanitized/
 
 # OS/editor noise
 .DS_Store

@@ -107,3 +107,105 @@ test('M5 segmentation: splitPdf copies exactly the requested inclusive ranges', 
     assert.equal(parsed.getPageCount(), part.pages)
   }
 })
+
+test('M5 segmentation: default task ceiling is MinerU\'s 200-page limit', async () => {
+  const { planPageRanges, MAX_PAGES_PER_TASK } = await import('../dist/pdf.js')
+  assert.equal(MAX_PAGES_PER_TASK, 200)
+  assert.deepEqual(planPageRanges(864), [
+    { from: 1, to: 200 },
+    { from: 201, to: 400 },
+    { from: 401, to: 600 },
+    { from: 601, to: 800 },
+    { from: 801, to: 864 },
+  ])
+})
+
+test('M5 segmentation: a lower MinerU page limit triggers automatic re-splitting', async (t) => {
+  const { ParseManager } = await import('../dist/mineru/job.js')
+  const { PDFDocument } = await import('pdf-lib')
+  const limit = 6
+  const h = await createHarness({ token: 'mineru-test-token-12345678' })
+  t.after(() => h.close())
+
+  class TinyLimitMineru {
+    constructor() {
+      this.requests = []
+      this.entries = []
+      this.byUrl = new Map()
+    }
+    async requestUpload(_token, request) {
+      this.requests.push(request)
+      const batchId = `batch-tiny-${this.requests.length}`
+      const url = `https://upload.example/${batchId}`
+      const entry = { batchId, dataId: request.dataId, url, pages: 0, zip: null }
+      this.entries.push(entry)
+      this.byUrl.set(url, entry)
+      return { batchId, fileUrls: [url] }
+    }
+    async uploadFile(url, filePath) {
+      const doc = await PDFDocument.load(await readFile(filePath))
+      this.byUrl.get(url).pages = doc.getPageCount()
+    }
+    async getBatch(_token, batchId) {
+      const entry = this.entries.find((item) => item.batchId === batchId)
+      const file = {
+        dataId: entry.dataId,
+        state: 'done',
+        fullZipUrl: `https://cdn.example/${batchId}.zip`,
+        totalPages: entry.pages,
+        extractedPages: entry.pages,
+      }
+      if (entry.pages > limit) {
+        return {
+          batchId,
+          files: [
+            {
+              ...file,
+              state: 'failed',
+              fullZipUrl: undefined,
+              errMsg: `number of pages exceeds limit (${limit} pages), please split the file and try again`,
+            },
+          ],
+        }
+      }
+      if (!entry.zip) {
+        entry.zip = await buildMineruZip({ pages: entry.pages, chapters: 1, sectionsPerChapter: 1, bookTitle: '二分教材' })
+      }
+      this.byUrl.set(file.fullZipUrl, entry)
+      return { batchId, files: [file] }
+    }
+    async downloadZip(url, target) {
+      await writeFile(target, this.byUrl.get(url).zip)
+    }
+  }
+
+  const fake = new TinyLimitMineru()
+  const parser = new ParseManager({
+    paths: h.paths,
+    books: h.books,
+    config: h.config,
+    tree: h.tree,
+    client: fake,
+    pollIntervalMs: 0,
+    maxPollMs: 10_000,
+    maxPagesPerTask: 10,
+    sleep: () => Promise.resolve(),
+  })
+  const pdf = await h.writePdf('tiny-limit.pdf', 23)
+  const added = await h.books.addFromFile(pdf, { title: '二分教材' })
+  const result = await parser.start(added.book.id)
+  await result.completion
+
+  const book = await h.books.getBook(added.book.id)
+  assert.equal(book.parse.status, 'done')
+  // 10 -> (5, 5); 10 -> (5, 5); 3 stays: the failed chunks are halved, not retried whole.
+  assert.deepEqual(fake.entries.map((entry) => entry.pages), [10, 5, 5, 10, 5, 5, 3])
+  assert.ok(book.parse.warnings.some((warning) => /自动二分/.test(warning)))
+
+  const normalized = JSON.parse(await readFile(join(h.paths.books, added.book.id, 'parse', 'normalized.json'), 'utf8'))
+  assert.equal(normalized.pages.length, 23)
+  assert.deepEqual(normalized.pages.map((page) => page.page), Array.from({ length: 23 }, (_, i) => i + 1))
+  const ids = normalized.pages.flatMap((page) => page.blocks.map((block) => block.id))
+  assert.equal(ids.length, new Set(ids).size)
+  assert.equal(normalized.pages.every((page) => page.blocks.every((block) => block.page === page.page)), true)
+})

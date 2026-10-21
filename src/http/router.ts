@@ -17,6 +17,8 @@ import { ensureDir, pathExists, randomId, readJsonFile } from '../store/atomic.j
 import type { ParseManager } from '../mineru/job.js'
 import type { TreeOperation } from '../tree/ops.js'
 import { searchNormalized } from '../search.js'
+import type { BookChatService } from '../chat/service.js'
+import { ChatError, type ChatAgentMode, type ChatContext, type ChatEvent } from '../chat/types.js'
 import { createRequestGuard, type ConnectionFence } from './guard.js'
 import {
   mimeType,
@@ -46,6 +48,7 @@ export interface ReaderRouterOptions {
   progress: ProgressStore
   tree: TreeStore
   parser?: ParseManager
+  chat?: BookChatService
   readerRoot?: string
   connection?: ConnectionFence
   logger?: ReaderLogger
@@ -61,12 +64,18 @@ export class ReaderRouter {
   private readonly progress: ProgressStore
   private readonly tree: TreeStore
   private readonly parser: ParseManager | undefined
+  private chat: BookChatService | undefined
   private readonly readerRoot: string
   private guard: (req: IncomingMessage) => number | null
   private connection: ConnectionFence | undefined
   private readonly trustedHosts: readonly string[] | undefined
   private readonly logger: ReaderLogger
   private readonly maxUploadBytes: number
+  /** mtime-keyed LRU: page/search requests must not re-parse a 5 MB normalized.json. */
+  private readonly normalizedCache = new Map<
+    string,
+    { mtimeMs: number; size: number; value: Promise<NormalizedBook | undefined> }
+  >()
 
   constructor(options: ReaderRouterOptions) {
     this.paths = options.paths
@@ -75,6 +84,7 @@ export class ReaderRouter {
     this.progress = options.progress
     this.tree = options.tree
     this.parser = options.parser
+    this.chat = options.chat
     this.readerRoot = options.readerRoot ?? join(packageRoot(), 'reader')
     this.connection = options.connection
     this.trustedHosts = options.trustedHosts ?? parseTrustedHosts()
@@ -84,6 +94,11 @@ export class ReaderRouter {
     })
     this.logger = options.logger ?? {}
     this.maxUploadBytes = options.maxUploadBytes ?? MAX_PDF_BYTES
+  }
+
+  /** Attach the per-book tutor chat once the host Agent runtime exists. */
+  attachChat(chat: BookChatService | undefined): void {
+    this.chat = chat
   }
 
   /** Attach the host connection fence once the service is available. */
@@ -151,6 +166,24 @@ export class ReaderRouter {
       return sendJson(res, 200, { ok: true, service: 'dsh-textbook-reader', milestone: 'M1' })
     }
 
+    if (section === 'chat' && segments.length === 3 && segments[2] === 'agents') {
+      if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+      if (!this.chat) throw new AppError(503, 'chat_unavailable', '聊天服务不可用。')
+      return sendJson(res, 200, { ok: true, agents: this.chat.liveRoots() })
+    }
+
+    if (section === 'chat' && segments.length === 3 && segments[2] === 'probe') {
+      if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+      if (!this.chat) throw new AppError(503, 'chat_unavailable', '聊天服务不可用。')
+      try {
+        const probeMode = url.searchParams.get('mode') === 'prepare' ? 'prepare' : 'stream'
+        const probe = await this.chat.probe(url.searchParams.get('session') ?? undefined, probeMode)
+        return sendJson(res, 200, { ok: true, probe })
+      } catch (error) {
+        throw chatHttpError(error)
+      }
+    }
+
     if (section === 'config' && segments.length === 2) {
       if (method === 'GET') return this.getConfig(res)
       if (method === 'PUT') return this.putConfig(req, res)
@@ -211,9 +244,219 @@ export class ReaderRouter {
         if (method !== 'GET' && method !== 'HEAD') return methodNotAllowed(res, ['GET', 'HEAD'])
         return this.serveAsset(req, res, id, segments.slice(4).map(decodeSegment).join('/'))
       }
+      if (segments.length >= 5 && segments[3] === 'chat') {
+        return this.handleChat(req, res, url, id, segments.slice(4))
+      }
+      if (segments.length === 4 && segments[3] === 'reading-state') {
+        if (method === 'GET') return this.getReadingState(res, id)
+        if (method === 'PUT') return this.putReadingState(req, res, id)
+        return methodNotAllowed(res, ['GET', 'PUT'])
+      }
     }
 
     throw notFound()
+  }
+
+  private async handleChat(
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+    id: string,
+    rest: string[],
+  ): Promise<void> {
+    const chat = this.chat
+    if (!chat) {
+      throw new AppError(503, 'chat_unavailable', '聊天服务不可用。', '确认 DSH Agent 服务已启用后重启。')
+    }
+    if (rest.length !== 1) throw notFound()
+    const action = rest[0]
+    const method = String(req.method ?? 'GET').toUpperCase()
+    const book = await this.books.getBook(id)
+
+    try {
+      if (action === 'session') {
+        if (method !== 'POST') return methodNotAllowed(res, ['POST'])
+        const mode = parseChatMode(url.searchParams.get('mode'))
+        const parentSessionId = url.searchParams.get('parent') ?? undefined
+        const result = await chat.ensure(book, {
+          ...(mode ? { mode } : {}),
+          ...(parentSessionId ? { parentSessionId } : {}),
+        })
+        return sendJson(res, 200, {
+          ok: true,
+          sessionId: result.sessionId,
+          messages: result.messages,
+        })
+      }
+      if (action === 'sessions') {
+        if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+        const result = await chat.listSessions(book)
+        return sendJson(res, 200, { ok: true, ...result })
+      }
+      if (action === 'activate') {
+        if (method !== 'POST') return methodNotAllowed(res, ['POST'])
+        const body = await readJsonBody(req, JSON_LIMIT)
+        if (!isRecord(body) || typeof body.id !== 'string' || !body.id.trim()) {
+          throw badRequest('切换对话需要 { id }。')
+        }
+        const result = await chat.activate(book, body.id.trim())
+        return sendJson(res, 200, { ok: true, ...result })
+      }
+      if (action === 'status') {
+        if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+        const status = await chat.status(book)
+        return sendJson(res, 200, { ok: true, ...status })
+      }
+      if (action === 'history') {
+        if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+        const limit = parseChatLimit(url.searchParams.get('limit'))
+        const history = await chat.history(book, limit)
+        return sendJson(res, 200, { ok: true, ...history })
+      }
+      if (action === 'messages') {
+        if (method !== 'POST') return methodNotAllowed(res, ['POST'])
+        const body = await readJsonBody(req, JSON_LIMIT)
+        if (!isRecord(body) || typeof body.text !== 'string') {
+          throw badRequest('消息必须是 { text, context? }。')
+        }
+        const result = await chat.send(book, body.text, this.chatContext(book, body.context), {
+          raw: body.raw === true,
+        })
+        return sendJson(res, 202, { ok: true, accepted: true, sessionId: result.sessionId })
+      }
+      if (action === 'events') {
+        if (method !== 'GET') return methodNotAllowed(res, ['GET'])
+        return this.chatEvents(req, res, book)
+      }
+      if (action === 'cancel') {
+        if (method !== 'POST') return methodNotAllowed(res, ['POST'])
+        await chat.cancel(book)
+        return sendJson(res, 200, { ok: true })
+      }
+      if (action === 'reset') {
+        if (method !== 'POST') return methodNotAllowed(res, ['POST'])
+        const result = await chat.reset(
+          book,
+          parseChatMode(url.searchParams.get('mode')),
+          url.searchParams.get('parent') ?? undefined,
+        )
+        return sendJson(res, 200, { ok: true, sessionId: result.sessionId })
+      }
+      throw notFound()
+    } catch (error) {
+      throw chatHttpError(error)
+    }
+  }
+
+  private async chatEvents(req: IncomingMessage, res: ServerResponse, book: Book): Promise<void> {
+    const chat = this.chat
+    if (!chat) throw new AppError(503, 'chat_unavailable', '聊天服务不可用。')
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders()
+
+    let closed = false
+    let unsubscribe: (() => void) | undefined
+    let heartbeat: NodeJS.Timeout | undefined
+    const close = (): void => {
+      if (closed) return
+      closed = true
+      if (heartbeat) clearInterval(heartbeat)
+      try {
+        unsubscribe?.()
+      } catch {
+        // The subscription is best effort during teardown.
+      }
+      if (!res.writableEnded) res.end()
+    }
+    const write = (event: ChatEvent): void => {
+      if (closed || res.writableEnded) return
+      try {
+        res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+      } catch {
+        close()
+      }
+    }
+
+    res.on('close', close)
+    req.on('close', close)
+    heartbeat = setInterval(() => {
+      if (closed || res.writableEnded) return
+      try {
+        res.write(': ping\n\n')
+      } catch {
+        close()
+      }
+    }, 15_000)
+
+    try {
+      unsubscribe = await chat.subscribe(book, write)
+    } catch (error) {
+      const app = chatHttpError(error)
+      write({ type: 'error', code: app.code, message: app.message, ...(app.hint ? { hint: app.hint } : {}) })
+      close()
+    }
+  }
+
+  private async getReadingState(res: ServerResponse, id: string): Promise<void> {
+    if (!this.chat) throw new AppError(503, 'chat_unavailable', '聊天服务不可用。')
+    await this.books.getBook(id)
+    try {
+      const state = await this.chat.readReadingState(id)
+      sendJson(res, 200, { ok: true, state: state ?? null })
+    } catch (error) {
+      throw chatHttpError(error)
+    }
+  }
+
+  private async putReadingState(req: IncomingMessage, res: ServerResponse, id: string): Promise<void> {
+    const chat = this.chat
+    if (!chat) throw new AppError(503, 'chat_unavailable', '聊天服务不可用。')
+    await this.books.getBook(id)
+    const body = await readJsonBody(req, JSON_LIMIT)
+    if (!isRecord(body)) throw badRequest('阅读状态必须是对象。')
+    try {
+      const state = await chat.writeReadingState(
+        id,
+        body as Parameters<BookChatService['writeReadingState']>[1],
+      )
+      sendJson(res, 200, { ok: true, state })
+    } catch (error) {
+      throw chatHttpError(error)
+    }
+  }
+
+  private chatContext(book: Book, value: unknown): ChatContext {
+    const base: ChatContext = { bookId: book.id, bookTitle: book.title }
+    if (!isRecord(value)) return base
+    const selection = isRecord(value.selection) && typeof value.selection.text === 'string'
+      ? {
+          text: value.selection.text,
+          ...(positiveInt(value.selection.page) ? { page: positiveInt(value.selection.page) } : {}),
+          ...(positiveInt(value.selection.pageFrom) ? { pageFrom: positiveInt(value.selection.pageFrom) } : {}),
+          ...(positiveInt(value.selection.pageTo) ? { pageTo: positiveInt(value.selection.pageTo) } : {}),
+          ...(Array.isArray(value.selection.blockIds)
+            ? {
+                blockIds: value.selection.blockIds
+                  .filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+                  .slice(0, 32),
+              }
+            : {}),
+        }
+      : undefined
+    return {
+      ...base,
+      ...(typeof value.nodeId === 'string' ? { nodeId: value.nodeId } : {}),
+      ...(typeof value.nodeTitle === 'string' ? { nodeTitle: value.nodeTitle } : {}),
+      ...(positiveInt(value.page) ? { page: positiveInt(value.page) } : {}),
+      ...(positiveInt(value.pageFrom) ? { pageFrom: positiveInt(value.pageFrom) } : {}),
+      ...(positiveInt(value.pageTo) ? { pageTo: positiveInt(value.pageTo) } : {}),
+      ...(selection ? { selection } : {}),
+      ...(typeof value.progress === 'string' ? { progress: value.progress } : {}),
+    }
   }
 
   private async serveIndex(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -486,7 +729,7 @@ export class ReaderRouter {
     const limitRaw = Number(url.searchParams.get('limit') ?? '5')
     const limit = Number.isInteger(limitRaw) ? Math.min(20, Math.max(1, limitRaw)) : 5
     const nodeId = url.searchParams.get('node') ?? undefined
-    const normalized = await readJsonFile<NormalizedBook>(this.normalizedFile(id))
+    const normalized = await this.readNormalized(id)
     if (!normalized) {
       throw new AppError(409, 'not_parsed', '这本书还没有解析结果。', '先在阅读器里开始解析。')
     }
@@ -510,7 +753,7 @@ export class ReaderRouter {
     if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > book.pages) {
       throw new AppError(422, 'invalid_page', `页码必须是 1 到 ${book.pages} 的整数。`)
     }
-    const normalized = await readJsonFile<NormalizedBook>(this.normalizedFile(id))
+    const normalized = await this.readNormalized(id)
     if (!normalized) {
       throw new AppError(409, 'not_parsed', '这本书还没有解析结果。', '先在阅读器里开始解析。')
     }
@@ -568,6 +811,42 @@ export class ReaderRouter {
 
   private normalizedFile(id: string): string {
     return join(this.books.bookDir(id), 'parse', 'normalized.json')
+  }
+
+  /**
+   * Read normalized.json through a small mtime/size-keyed LRU. The reader now
+   * requests one page per rendered PDF page, and a parsed textbook can be
+   * several megabytes; re-reading and re-parsing it per page is not viable.
+   */
+  private async readNormalized(id: string): Promise<NormalizedBook | undefined> {
+    const file = this.normalizedFile(id)
+    let info
+    try {
+      info = await stat(file)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+      throw error
+    }
+    const cached = this.normalizedCache.get(id)
+    if (cached && cached.mtimeMs === info.mtimeMs && cached.size === info.size) {
+      // Refresh insertion order for the tiny LRU.
+      this.normalizedCache.delete(id)
+      this.normalizedCache.set(id, cached)
+      return cached.value
+    }
+    const value = readJsonFile<NormalizedBook>(file)
+    const entry = { mtimeMs: info.mtimeMs, size: info.size, value }
+    this.normalizedCache.delete(id)
+    this.normalizedCache.set(id, entry)
+    void value.catch(() => {
+      if (this.normalizedCache.get(id) === entry) this.normalizedCache.delete(id)
+    })
+    while (this.normalizedCache.size > 2) {
+      const oldest = this.normalizedCache.keys().next().value
+      if (oldest === undefined) break
+      this.normalizedCache.delete(oldest)
+    }
+    return value
   }
 
   private logFailure(req: IncomingMessage, error: unknown): void {
@@ -633,6 +912,38 @@ function parseTrustedHosts(): string[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function positiveInt(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : undefined
+}
+
+function parseChatLimit(value: string | null): number {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 50
+  return Math.min(100, Math.max(1, Math.trunc(parsed)))
+}
+
+function parseChatMode(value: string | null): ChatAgentMode | undefined {
+  return value === 'full' || value === 'minimal' || value === 'restrict' || value === 'tutor'
+    ? value
+    : undefined
+}
+
+function chatHttpError(error: unknown): AppError {
+  if (isAppError(error)) return error
+  if (error instanceof ChatError) {
+    const status =
+      error.code === 'empty_message'
+        ? 400
+        : error.code === 'model_missing'
+          ? 409
+          : error.code === 'send_failed'
+            ? 502
+            : 503
+    return new AppError(status, error.code, error.message, error.hint)
+  }
+  return new AppError(500, 'chat_failed', '聊天服务失败。')
 }
 
 function packageRoot(): string {

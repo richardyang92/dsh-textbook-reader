@@ -8,11 +8,11 @@
 pnpm test
 ```
 
-当前 **41 项**通过。最新 M5 构建已在真实 DSH Web profile（端口 52102）重新安装并确认 host/client 均激活、iframe 正常加载（截图：[m5-dsh-latest.png](screenshots/m5-dsh-latest.png)）。
+当前 **65 项**通过。最新 M5 构建已在真实 DSH Web profile（端口 52102）重新安装并确认 host/client 均激活、iframe 正常加载（截图：[m5-dsh-latest.png](screenshots/m5-dsh-latest.png)）。
 
 M5 新增覆盖：
 
-- **>600 页分段**：`splitPdf` 把 23 页切成 10/10/3，三段分别解析后合并回 1..23 页；标题页码加偏移；重复封面标题去重；分段临时 PDF 清理；分段图片仍可访问；测试用 `maxPagesPerTask=10` 模拟 MinerU 600 页上限。
+- **>200 页分段**：`splitPdf` 把 23 页切成 10/10/3，三段分别解析后合并回 1..23 页；标题页码加偏移；重复封面标题去重；分段临时 PDF 清理；分段图片仍可访问；默认上限 200 页（MinerU 实测拒绝 600 页任务），测试用 `maxPagesPerTask=10` 模拟；另有用例模拟服务端上限低于本地分段时的自动二分重试。
 - **失败降级**：网络不可达 → `mineru_unreachable`；超时 → `mineru_timeout`；MinerU 页数拒绝 → `mineru_page_limit`；损坏 zip → 解析状态 `failed` + `zip_invalid`，不会静默成功。
 - **URL 安全**：拒绝 http、localhost、私网地址的结果包/上传 URL（防 SSRF）。
 - **无 token**：返回 `token_missing`，不发起上传。

@@ -1,5 +1,5 @@
 /**
- * Local PDF splitting for documents above MinerU's 600-page task limit.
+ * Local PDF splitting for documents above MinerU's 200-page task limit.
  *
  * The split is a plain document operation (pdf-lib); no local OCR/model is
  * involved. Page numbers stay 1-based in the merged reader.

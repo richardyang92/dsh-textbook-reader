@@ -1,14 +1,14 @@
 # 技术方案
 
-> 状态：MVP（M0–M5）代码完成。方案 v1 已确认：主面板落位、无专用 agent preset、图注 VLM 默认关闭。验收证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
+> 状态：v0.6.0 代码完成（M0–M5 + 伴读聊天 C1/C2）。阅读器在官方主面板 iframe 中运行，伴读聊天使用专用的 `textbook-tutor` agent preset；图注 VLM 默认关闭。验收证据见 [ACCEPTANCE.md](ACCEPTANCE.md)。
 
 ## 1. 交付形态
 
 单包 `dsh-textbook-reader`：
 
 - **宿主半**：Cordis 插件，`dist/index.js`。注册 `textbook_*` agent 工具和 `/textbook-reader` 路由，负责 MinerU 调用、数据持久化、引用基址。
-- **浏览器半**：`dsh.client` 声明的 React 插件，构建到 `lib/client.js`。在 `sidebar.panellist` 添加「教材伴读」入口，注册 `main` 面板，用 iframe 承载独立阅读器；拦截聊天里的引用链接。
-- **阅读器页**：独立静态页面（pdf.js + 章节树 + 进度/疑问 + 设置），由宿主路由提供。默认不改官方界面。
+- **浏览器半**：`dsh.client` 声明的 React 插件，构建到 `lib/client.js`。在 `sidebar.panellist` 添加「教材伴读」入口，注册 `main` 面板，用 iframe 承载独立阅读器；拦截聊天里的引用链接；接收阅读器 `tbr:context` 的页/节/选区，把选区送入聊天 `<reading-context>`。
+- **阅读器页**：独立静态页面（pdf.js + 章节树 + 进度/疑问 + 设置），由宿主路由提供。解析完成后按 MinerU block bbox 在页面 canvas 上生成透明可选文本层，因此扫描版 PDF 也能拖选原文；默认不改官方界面。
 
 ## 2. 数据模型
 
@@ -32,7 +32,7 @@ interface Book {
     status: ParseStatus
     progress?: number         // 0..100
     batchId?: string
-    segments?: SegmentState[] // >600 页分段
+    segments?: SegmentState[] // >200 页分段
     warnings: string[]
     error?: { code: string; message: string; hint?: string }
   }
@@ -141,8 +141,8 @@ interface Progress {
 
 限制与分段：
 
-- 单文件 ≤200 MB、≤600 页；超过 200 MB 明确拒绝；
-- 超过 600 页用 `pdf-lib` 本地切段（每段 ≤600 页），分别提交，合并时页号加段偏移；
+- 单文件 ≤200 MB；单任务 ≤200 页（API 实测上限，文档的 600 页会被服务端拒绝）；超过 200 MB 明确拒绝；
+- 超过 200 页用 `pdf-lib` 本地切段（每段 ≤200 页），分别提交，合并时页号加段偏移；MinerU 若报更小的页数上限（任务异步失败），对该段自动二分重试；
 - 参数 `model_version="vlm"`、`is_ocr`、`enable_table`、`page_ranges`；
 - 回调可选，MVP 使用轮询。
 
@@ -183,6 +183,7 @@ src/tree/                    自动生成、手动 ops、校验
 src/search.ts                全文检索
 src/routes/                  路由分发、鉴权、Range、静态文件
 src/tools/                   textbook_* 工具
+src/chat/                    伴读会话、工具摘要、tutor preset
 src/prompt.ts                引用契约系统提示
 src/client/index.tsx         浏览器半
 src/reader/main.ts           阅读器
@@ -207,7 +208,7 @@ test/*.test.mjs
 | M2 | MinerU、自适应 zip、归一化、自动树 | 真实 1 页校准；≥400 页树 |
 | M3 | 树编辑、进度/疑问、重启恢复 | ✅ pdf.js 阅读器、树编辑、进度/疑问持久化（[VERIFY-M3](VERIFY-M3.md)） |
 | M4 | 侧栏入口 + main iframe + 引用拦截 + 工具 | ✅ 真实 DSH Web profile：工具调用 + `[p.N]` 点击高亮（[VERIFY-M4](VERIFY-M4.md)） |
-| M5 | >600 页分段、失败降级、安全/无外发、文档 | ✅ 41 项测试；420 页合成树、重启、无 token、无图注外发证据见 [VERIFY-M5](VERIFY-M5.md) |
+| M5 | >200 页分段、失败降级、安全/无外发、文档 | ✅ 43 项测试；420 页合成树、重启、无 token、无图注外发证据见 [VERIFY-M5](VERIFY-M5.md) |
 | M6 | 全量验收、截图、交付说明 | 逐条证据 |
 
 ## 8. 验收映射
